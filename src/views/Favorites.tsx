@@ -2,12 +2,16 @@ import { useState } from 'react';
 import { Star } from 'lucide-react';
 import { LoadingSpinner } from '../components/Common/LoadingSpinner';
 import { useFavorites } from '../context/FavoritesContext';
+import { useTheme } from '../context/ThemeContext';
+import { useI18n } from '../context/I18nContext';
 import { ProductCard } from '../components/Product/ProductCard';
 import { ProductModal } from '../components/Product/ProductModal';
 import { SearchResult } from '../types';
 
 export function Favorites() {
   const { favorites, isLoading } = useFavorites();
+  const { theme } = useTheme();
+  const { t } = useI18n();
   const [selectedProduct, setSelectedProduct] = useState<SearchResult | null>(null);
 
   if (isLoading) {
@@ -18,21 +22,23 @@ export function Favorites() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Favoritos</h1>
-          <p className="text-gray-600 mt-1">
-            Gestiona tus productos favoritos
+          <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {t('favoritesTitle')}
+          </h1>
+          <p className={`mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            {t('favoritesSubtitle')}
           </p>
         </div>
       </div>
 
       {favorites.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <Star className="mx-auto text-gray-400 mb-4" size={48} />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No tienes favoritos
+        <div className={`rounded-lg border p-12 text-center ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          <Star className={`mx-auto mb-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} size={48} />
+          <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {t('noFavoritesTitle')}
           </h3>
-          <p className="text-gray-600 mb-4">
-            Agrega productos a favoritos para guardarlos aquí
+          <p className={`mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            {t('noFavoritesDesc')}
           </p>
         </div>
       ) : (

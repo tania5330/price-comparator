@@ -4,8 +4,12 @@ import { LoadingSpinner } from '../components/Common/LoadingSpinner';
 import { Badge } from '../components/Common/Badge';
 import { PriceAlert } from '../types';
 import { ApiService } from '../services/api';
+import { useTheme } from '../context/ThemeContext';
+import { useI18n } from '../context/I18nContext';
 
 export function Alerts() {
+  const { theme } = useTheme();
+  const { t } = useI18n();
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -109,7 +113,7 @@ export function Alerts() {
 
     } catch (error) {
       console.error('Error creating alert:', error);
-      window.alert('Error al crear la alerta');
+      window.alert(t('createAlertError'));
     }
   };
 
@@ -123,7 +127,7 @@ export function Alerts() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta alerta?')) return;
+    if (!window.confirm(t('deleteConfirm'))) return;
     try {
       await ApiService.deleteAlert(id);
       setAlerts(alerts.filter(a => a.id !== id));
@@ -137,7 +141,7 @@ export function Alerts() {
     const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
-      window.alert('Credenciales de Telegram no configuradas en .env (se necesitan VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID)');
+      window.alert(t('telegramCredentialsError'));
       return;
     }
 
@@ -165,24 +169,24 @@ export function Alerts() {
       });
 
       if (response.ok) {
-        window.alert('¡Notificación enviada a Telegram con éxito! Revisa tu chat.');
+        window.alert(t('telegramSuccess'));
       } else {
         const errData = await response.json();
         console.error('Error al enviar notificación Telegram:', errData);
-        window.alert(`Error de Telegram: ${errData.description || 'Código incorrecto'}`);
+        window.alert(`${t('telegramError')} ${errData.description || 'Código incorrecto'}`);
       }
     } catch (error) {
       console.error('Error sending telegram message:', error);
-      window.alert('Error de red al intentar conectarse con Telegram.');
+      window.alert(t('telegramNetworkError'));
     }
   };
 
 
   const getConditionText = (condition: string, targetPrice: number) => {
     const conditionMap: Record<string, string> = {
-      below: `Menor a $${targetPrice.toFixed(2)}`,
-      above: `Mayor a $${targetPrice.toFixed(2)}`,
-      equals: `Igual a $${targetPrice.toFixed(2)}`,
+      below: `${t('belowConditionText')} $${targetPrice.toFixed(2)}`,
+      above: `${t('aboveConditionText')} $${targetPrice.toFixed(2)}`,
+      equals: `${t('equalsConditionText')} $${targetPrice.toFixed(2)}`,
     };
     return conditionMap[condition] || condition;
   };
@@ -208,9 +212,11 @@ export function Alerts() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Alertas de precio</h1>
-          <p className="text-gray-600 mt-1">
-            Configura alertas para recibir notificaciones cuando los precios cambien
+          <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {t('alertsTitle')}
+          </h1>
+          <p className={`mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            {t('alertsSubtitle')}
           </p>
         </div>
 
@@ -219,42 +225,44 @@ export function Alerts() {
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus size={20} />
-          <span>Nueva alerta</span>
+          <span>{t('newAlert')}</span>
         </button>
       </div>
 
       {showCreateForm && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Crear alerta de precio
+        <div className={`rounded-lg border p-6 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          <h3 className={`text-lg font-semibold mb-4 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {t('createAlertTitle')}
           </h3>
 
           <form onSubmit={handleCreateAlert} className="space-y-4">
             <div className="relative">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Producto (Nombre)
+              <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                {t('productFieldLabel')}
               </label>
               <input
                 type="text"
                 required
                 value={newAlert.product_name}
                 onChange={(e) => handleSearchProduct(e.target.value)}
-                placeholder="Ej: iPhone 15 Pro"
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={t('productPlaceholder')}
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
                 autoComplete="off"
               />
               {suggestions.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-auto">
+                <div className={`absolute z-10 w-full mt-1 border rounded-lg shadow-lg max-h-60 overflow-auto ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
                   {suggestions.map((product, index) => (
                     <button
                       key={index}
                       type="button"
                       onClick={() => handleSelectProduct(product)}
-                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm text-gray-700 transition-colors flex justify-between items-center"
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors flex justify-between items-center ${theme === 'dark' ? 'hover:bg-gray-700 text-gray-300' : 'hover:bg-gray-50 text-gray-700'}`}
                     >
                       <span>{product.canonical_name || product.name}</span>
                       {product.price && (
-                        <span className="text-gray-500 text-xs">${product.price}</span>
+                        <span className={theme === 'dark' ? 'text-gray-400 text-xs' : 'text-gray-500 text-xs'}>
+                          ${product.price}
+                        </span>
                       )}
                     </button>
                   ))}
@@ -264,23 +272,23 @@ export function Alerts() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Condición
+                <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {t('conditionFieldLabel')}
                 </label>
                 <select
                   value={newAlert.condition}
                   onChange={(e) => setNewAlert({ ...newAlert, condition: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
                 >
-                  <option value="below">Por debajo de</option>
-                  <option value="above">Por encima de</option>
-                  <option value="equals">Igual a</option>
+                  <option value="below">{t('conditionBelow')}</option>
+                  <option value="above">{t('conditionAbove')}</option>
+                  <option value="equals">{t('conditionEquals')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Precio objetivo
+                <label className={`block text-sm font-medium mb-2 ${theme === 'dark' ? 'text-gray-300' : 'text-gray-700'}`}>
+                  {t('targetPriceLabel')}
                 </label>
                 <input
                   type="number"
@@ -289,7 +297,7 @@ export function Alerts() {
                   value={newAlert.target_price}
                   onChange={(e) => setNewAlert({ ...newAlert, target_price: e.target.value })}
                   placeholder="0.00"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
                 />
               </div>
             </div>
@@ -299,14 +307,14 @@ export function Alerts() {
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Crear alerta
+                {t('createAlertBtn')}
               </button>
               <button
                 type="button"
                 onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                className={`px-4 py-2 border rounded-lg transition-colors ${theme === 'dark' ? 'border-gray-600 text-gray-300 hover:bg-gray-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
               >
-                Cancelar
+                {t('cancelBtn')}
               </button>
             </div>
           </form>
@@ -314,80 +322,79 @@ export function Alerts() {
       )}
 
       {alerts.length === 0 ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <Bell className="mx-auto text-gray-400 mb-4" size={48} />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No tienes alertas configuradas
+        <div className={`rounded-lg border p-12 text-center ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+          <Bell className={`mx-auto mb-4 ${theme === 'dark' ? 'text-gray-500' : 'text-gray-400'}`} size={48} />
+          <h3 className={`text-lg font-semibold mb-2 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+            {t('noAlertsTitle')}
           </h3>
-          <p className="text-gray-600 mb-4">
-            Crea alertas para recibir notificaciones cuando los precios cambien
+          <p className={`mb-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+            {t('noAlertsDesc')}
           </p>
           <button
             onClick={() => setShowCreateForm(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus size={20} />
-            <span>Crear primera alerta</span>
+            <span>{t('createFirstAlertBtn')}</span>
           </button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className={`rounded-lg border overflow-hidden ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className={`border-b ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Producto
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {t('productColumn')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Condición
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {t('conditionColumn')}
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
+                <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {t('statusColumn')}
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
+                <th className={`px-6 py-3 text-right text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
+                  {t('actionsColumn')}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className={`divide-y ${theme === 'dark' ? 'divide-gray-700' : 'divide-gray-200'}`}>
               {alerts.map((alert) => {
                 const conditionMet = isConditionMet(alert);
                 return (
                   <tr
                     key={alert.id}
-                    className={`transition-colors ${conditionMet ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'
-                      }`}
+                    className={`transition-colors ${conditionMet ? (theme === 'dark' ? 'bg-green-900/20 hover:bg-green-900/30' : 'bg-green-50 hover:bg-green-100') : (theme === 'dark' ? 'hover:bg-gray-700' : 'hover:bg-gray-50')}`}
                   >
                     <td className="px-6 py-4">
-                      <span className="font-medium text-gray-900">
+                      <span className={`font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
                         {alert.product_name}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-gray-600">
+                    <td className={`px-6 py-4 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
                       {getConditionText(alert.condition, alert.target_price)}
                     </td>
                     <td className="px-6 py-4">
                       {conditionMet ? (
-                        <Badge variant="success">Condición Cumplida</Badge>
+                        <Badge variant="success">{t('conditionMetBadge')}</Badge>
                       ) : alert.is_active ? (
-                        <Badge variant="info">Activa</Badge>
+                        <Badge variant="info">{t('activeBadge')}</Badge>
                       ) : (
-                        <Badge variant="warning">Pausada</Badge>
+                        <Badge variant="warning">{t('pausedBadge')}</Badge>
                       )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => sendTelegramNotification(alert)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Probar notificación"
+                          className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'text-blue-400 hover:bg-blue-900/20' : 'text-blue-600 hover:bg-blue-50'}`}
+                          title={t('testNotificationTitle')}
                         >
                           <Send size={18} />
                         </button>
                         <button
                           onClick={() => handleToggleActive(alert.id, alert.is_active)}
-                          className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title={alert.is_active ? 'Pausar' : 'Activar'}
+                          className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'text-gray-400 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'}`}
+                          title={alert.is_active ? t('pauseTitle') : t('activateTitle')}
                         >
                           {alert.is_active ? (
                             <Pause size={18} />
@@ -397,8 +404,8 @@ export function Alerts() {
                         </button>
                         <button
                           onClick={() => handleDelete(alert.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Eliminar"
+                          className={`p-2 rounded-lg transition-colors ${theme === 'dark' ? 'text-red-400 hover:bg-red-900/20' : 'text-red-600 hover:bg-red-50'}`}
+                          title={t('deleteTitle')}
                         >
                           <Trash2 size={18} />
                         </button>

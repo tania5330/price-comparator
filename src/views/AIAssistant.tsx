@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { ApiService } from '../services/api';
 import { Sparkles, Send, Bot, User, Trash2, X, AlertCircle } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
+import { useI18n } from '../context/I18nContext';
 
 interface ProductContext {
   id: string;
@@ -18,10 +20,12 @@ interface Message {
 }
 
 export function AIAssistant({ initialProductContext, onClearProductContext }: AIAssistantProps) {
+  const { theme } = useTheme();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: '¡Hola! Soy tu asistente de compras inteligente. 🤖\n\n¿En qué te puedo ayudar hoy? Podés preguntarme sobre productos específicos, presupuestos, o cuándo conviene comprar.',
+      content: t('aiGreeting'),
     },
   ]);
   const [input, setInput] = useState('');
@@ -37,7 +41,7 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
         ...prev,
         {
           role: 'assistant',
-          content: `Entendido. Vamos a hablar sobre **${initialProductContext.name}**. ¿Qué te gustaría saber sobre este producto? (por ejemplo, si conviene comprarlo o si hay mejores opciones).`,
+          content: `${t('aiProductContextIntro')} **${initialProductContext.name}**. ${t('aiProductContextPrompt')}`,
         },
       ]);
     }
@@ -70,7 +74,7 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
         ...prev,
         {
           role: 'assistant',
-          content: 'Disculpame, tuve un problema al procesar tu consulta. Por favor, intentá de nuevo en unos instantes.',
+          content: t('aiError'),
         },
       ]);
     } finally {
@@ -82,7 +86,7 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
     setMessages([
       {
         role: 'assistant',
-        content: 'Chat reiniciado. ¿En qué te puedo ayudar hoy?',
+        content: t('aiClearChat'),
       },
     ]);
     handleRemoveContext();
@@ -94,29 +98,29 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
   };
 
   const suggestions = [
-    '¿Qué celular me recomendás con buena cámara?',
-    '¿Cómo sé si un producto está a buen precio?',
-    '¿Qué es conveniente comprar hoy?',
-    'Dame consejos para ahorrar en mis compras online',
+    t('aiSug1'),
+    t('aiSug2'),
+    t('aiSug3'),
+    t('aiSug4'),
   ];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <div className={`flex flex-col h-[calc(100vh-8rem)] max-w-4xl mx-auto rounded-2xl border shadow-sm overflow-hidden ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+      <div className={`px-6 py-4 border-b flex items-center justify-between ${theme === 'dark' ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
         <div className="flex items-center gap-2.5">
-          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+          <div className={`p-2 rounded-xl ${theme === 'dark' ? 'bg-indigo-900/50 text-indigo-400' : 'bg-indigo-50 text-indigo-600'}`}>
             <Sparkles size={20} className="animate-pulse" />
           </div>
           <div>
-            <h2 className="font-bold text-gray-900">Asistente de Compras IA</h2>
-            <p className="text-xs text-gray-500">Respondido por ChatGPT (gpt-4o-mini)</p>
+            <h2 className={`font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{t('aiTitle')}</h2>
+            <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('aiSubtitle')}</p>
           </div>
         </div>
         <button
           onClick={handleClearChat}
-          title="Limpiar chat"
-          className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+          title={t('aiClearBtn')}
+          className={`p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
         >
           <Trash2 size={18} />
         </button>
@@ -124,14 +128,14 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
 
       {/* Product Context Banner */}
       {productContext && (
-        <div className="px-6 py-2 bg-indigo-50 border-b border-indigo-100 flex items-center justify-between text-xs text-indigo-900">
+        <div className={`px-6 py-2 border-b flex items-center justify-between text-xs ${theme === 'dark' ? 'bg-indigo-900/20 border-indigo-900/50 text-indigo-300' : 'bg-indigo-50 border-indigo-100 text-indigo-900'}`}>
           <div className="flex items-center gap-1.5 font-medium truncate">
-            <AlertCircle size={14} className="text-indigo-600 shrink-0" />
-            <span className="truncate">Preguntando sobre: <strong className="font-semibold">{productContext.name}</strong></span>
+            <AlertCircle size={14} className={`shrink-0 ${theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'}`} />
+            <span className="truncate">{t('aiProductContextBanner')} <strong className="font-semibold">{productContext.name}</strong></span>
           </div>
           <button
             onClick={handleRemoveContext}
-            className="p-1 hover:bg-indigo-100 rounded text-indigo-600 transition-colors"
+            className={`p-1 rounded transition-colors ${theme === 'dark' ? 'hover:bg-indigo-900/50 text-indigo-400' : 'hover:bg-indigo-100 text-indigo-600'}`}
           >
             <X size={14} />
           </button>
@@ -139,14 +143,16 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/30">
+      <div className={`flex-1 overflow-y-auto p-6 space-y-4 ${theme === 'dark' ? 'bg-gray-900/30' : 'bg-gray-50/30'}`}>
         {messages.map((msg, index) => {
           const isUser = msg.role === 'user';
           return (
             <div key={index} className={`flex gap-3 max-w-[85%] ${isUser ? 'ml-auto flex-row-reverse' : 'mr-auto'}`}>
               <div
                 className={`p-2 rounded-xl shrink-0 h-9 w-9 flex items-center justify-center border shadow-sm ${
-                  isUser ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-white text-gray-600 border-gray-200'
+                  isUser 
+                    ? 'bg-indigo-600 text-white border-indigo-700' 
+                    : `${theme === 'dark' ? 'bg-gray-800 text-gray-400 border-gray-700' : 'bg-white text-gray-600 border-gray-200'}`
                 }`}
               >
                 {isUser ? <User size={16} /> : <Bot size={16} />}
@@ -155,7 +161,7 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
                 className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-line shadow-sm border ${
                   isUser
                     ? 'bg-indigo-600 text-white border-indigo-700 rounded-tr-none'
-                    : 'bg-white text-gray-800 border-gray-200 rounded-tl-none'
+                    : `${theme === 'dark' ? 'bg-gray-800 text-gray-200 border-gray-700 rounded-tl-none' : 'bg-white text-gray-800 border-gray-200 rounded-tl-none'}`
                 }`}
               >
                 {msg.content}
@@ -166,15 +172,15 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
 
         {isLoading && (
           <div className="flex gap-3 max-w-[85%] mr-auto">
-            <div className="p-2 rounded-xl shrink-0 h-9 w-9 flex items-center justify-center bg-white text-indigo-600 border border-gray-200 shadow-sm">
+            <div className={`p-2 rounded-xl shrink-0 h-9 w-9 flex items-center justify-center border shadow-sm ${theme === 'dark' ? 'bg-gray-800 text-indigo-400 border-gray-700' : 'bg-white text-indigo-600 border-gray-200'}`}>
               <Bot size={16} className="animate-spin" />
             </div>
-            <div className="bg-white text-gray-500 border border-gray-200 p-4 rounded-2xl rounded-tl-none text-sm shadow-sm flex items-center gap-1.5">
-              <span>Pensando</span>
+            <div className={`p-4 rounded-2xl rounded-tl-none text-sm shadow-sm flex items-center gap-1.5 border ${theme === 'dark' ? 'bg-gray-800 text-gray-400 border-gray-700' : 'bg-white text-gray-500 border-gray-200'}`}>
+              <span>{t('aiThinking')}</span>
               <span className="flex gap-0.5 mt-1">
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-75"></span>
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-150"></span>
-                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce delay-300"></span>
+                <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-75 ${theme === 'dark' ? 'bg-gray-500' : 'bg-gray-400'}`}></span>
+                <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-150 ${theme === 'dark' ? 'bg-gray-500' : 'bg-gray-400'}`}></span>
+                <span className={`w-1.5 h-1.5 rounded-full animate-bounce delay-300 ${theme === 'dark' ? 'bg-gray-500' : 'bg-gray-400'}`}></span>
               </span>
             </div>
           </div>
@@ -184,14 +190,18 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
 
       {/* Suggested Prompts (when no chat yet other than greeting) */}
       {messages.length === 1 && (
-        <div className="px-6 py-3 border-t border-gray-100 bg-white">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Preguntas sugeridas</p>
+        <div className={`px-6 py-3 border-t ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-100'}`}>
+          <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('aiSuggestionsLabel')}</p>
           <div className="flex flex-wrap gap-2">
             {suggestions.map((sug, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSend(sug)}
-                className="text-xs bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 border border-gray-200 hover:border-indigo-200 text-gray-600 px-3 py-2 rounded-xl font-medium transition-all text-left"
+                className={`text-xs px-3 py-2 rounded-xl font-medium transition-all text-left border ${
+                  theme === 'dark' 
+                    ? 'bg-gray-700 hover:bg-indigo-900/20 hover:text-indigo-400 border-gray-600 hover:border-indigo-800 text-gray-300' 
+                    : 'bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 border-gray-200 hover:border-indigo-200 text-gray-600'
+                }`}
               >
                 {sug}
               </button>
@@ -201,7 +211,7 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
       )}
 
       {/* Input */}
-      <div className="p-4 border-t border-gray-200 bg-white">
+      <div className={`p-4 border-t ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -216,15 +226,19 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
             disabled={isLoading}
             placeholder={
               productContext
-                ? `Preguntale a la IA sobre ${productContext.name}...`
-                : 'Escribí tu consulta sobre ofertas, precios...'
+                ? `${t('aiPlaceholderWithProduct')} ${productContext.name}...`
+                : t('aiPlaceholderWithoutProduct')
             }
-            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm disabled:bg-gray-50"
+            className={`flex-1 px-4 py-3 rounded-xl border focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm disabled:opacity-50 ${
+              theme === 'dark' 
+                ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400' 
+                : 'bg-white border-gray-200 text-gray-900'
+            }`}
           />
           <button
             type="submit"
             disabled={!input.trim() || isLoading}
-            className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl disabled:bg-indigo-300 disabled:shadow-none shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/20 transition-all shrink-0 flex items-center justify-center"
+            className="p-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl disabled:bg-indigo-800 disabled:shadow-none shadow-md shadow-indigo-600/10 hover:shadow-indigo-600/20 transition-all shrink-0 flex items-center justify-center"
           >
             <Send size={18} />
           </button>

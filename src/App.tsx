@@ -9,6 +9,7 @@ import { Favorites } from './views/Favorites';
 import { Alerts } from './views/Alerts';
 import { AIAssistant } from './views/AIAssistant';
 import { AIFloatingChat } from './components/Layout/AIFloatingChat';
+import { useTheme } from './context/ThemeContext';
 
 type ViewType = 'dashboard' | 'search' | 'comparison' | 'favorites' | 'alerts' | 'settings' | 'assistant';
 
@@ -16,6 +17,7 @@ function AppContent() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [selectedProductForChat, setSelectedProductForChat] = useState<{ id: string; name: string } | null>(null);
   const { performSearch } = useSearch();
+  const { theme } = useTheme();
 
   useEffect(() => {
     const handleOpenChat = (event: Event) => {
@@ -68,7 +70,7 @@ function AppContent() {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 flex relative">
+    <div className={`min-h-screen flex relative transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'}`}>
       <Sidebar currentView={currentView} onViewChange={handleViewChange} />
 
       <div className="flex-1 flex flex-col">

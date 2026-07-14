@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useSearch } from '../context/SearchContext';
+import { useTheme } from '../context/ThemeContext';
+import { useI18n } from '../context/I18nContext';
 import { AlertCircle } from 'lucide-react';
 import { SearchFilters } from '../components/Search/SearchFilters';
 import { ProductCard } from '../components/Product/ProductCard';
@@ -17,6 +19,8 @@ export function SearchResults() {
     filters,
     setFilters
   } = useSearch();
+  const { theme } = useTheme();
+  const { t } = useI18n();
 
   const [selectedProduct, setSelectedProduct] = useState<SearchResult | null>(null);
 
@@ -32,18 +36,18 @@ export function SearchResults() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Resultados de búsqueda
+        <h1 className={`text-2xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+          {t('searchResultsTitle')}
         </h1>
-        <p className="text-gray-600 mt-1">
-          {searchQuery && `Búsqueda: "${searchQuery}"`}
+        <p className={`mt-1 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+          {searchQuery && `${t('searchQueryLabel')}: "${searchQuery}"`}
         </p>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="text-red-600" size={20} />
-          <p className="text-red-700">{error}</p>
+        <div className={`rounded-lg p-4 flex items-center gap-3 ${theme === 'dark' ? 'bg-red-900/20 border border-red-800' : 'bg-red-50 border border-red-200'}`}>
+          <AlertCircle className={theme === 'dark' ? 'text-red-400' : 'text-red-600'} size={20} />
+          <p className={theme === 'dark' ? 'text-red-300' : 'text-red-700'}>{error}</p>
         </div>
       )}
 
@@ -59,8 +63,8 @@ export function SearchResults() {
         <div className="lg:col-span-3">
           {filteredResults.length > 0 ? (
             <div className="space-y-8">
-              <p className="text-sm text-gray-600">
-                {filteredResults.length} {filteredResults.length === 1 ? 'resultado' : 'resultados'}
+              <p className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
+                {filteredResults.length} {filteredResults.length === 1 ? t('searchResultsCount') : t('searchResultsCount_plural')}
               </p>
 
               {filters.groupBy === 'source' ? (
@@ -74,8 +78,8 @@ export function SearchResults() {
                   }, {} as Record<string, SearchResult[]>)
                 ).map(([source, products]) => (
                   <div key={source} className="space-y-4">
-                    <h2 className="text-lg font-semibold text-gray-900 border-b pb-2">
-                      {source} <span className="text-sm font-normal text-gray-500">({products.length})</span>
+                    <h2 className={`text-lg font-semibold border-b pb-2 ${theme === 'dark' ? 'text-white border-gray-700' : 'text-gray-900 border-gray-200'}`}>
+                      {source} <span className={`text-sm font-normal ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>({products.length})</span>
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                       {products.map((product) => (
@@ -102,11 +106,11 @@ export function SearchResults() {
               )}
             </div>
           ) : (
-            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-              <p className="text-gray-500">
+            <div className={`rounded-lg border p-12 text-center ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
+              <p className={theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}>
                 {searchQuery
-                  ? 'No se encontraron productos con los criterios especificados.'
-                  : 'Realiza una búsqueda para ver resultados.'}
+                  ? t('noResultsWithQuery')
+                  : t('noResultsWithoutQuery')}
               </p>
             </div>
           )}

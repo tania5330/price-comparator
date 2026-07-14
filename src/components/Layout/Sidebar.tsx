@@ -1,4 +1,6 @@
 import { LayoutDashboard, Search, Star, Bell, Sparkles } from 'lucide-react';
+import { useTheme } from '../../context/ThemeContext';
+import { useI18n } from '../../context/I18nContext';
 
 interface SidebarProps {
   currentView: string;
@@ -6,18 +8,21 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentView, onViewChange }: SidebarProps) {
+  const { theme } = useTheme();
+  const { t } = useI18n();
+
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'search', label: 'Buscar', icon: Search },
-    { id: 'favorites', label: 'Favoritos', icon: Star },
-    { id: 'alerts', label: 'Alertas', icon: Bell },
-    { id: 'assistant', label: 'Asistente IA', icon: Sparkles },
+    { id: 'dashboard', label: t('dashboard'), icon: LayoutDashboard },
+    { id: 'search', label: t('search'), icon: Search },
+    { id: 'favorites', label: t('favorites'), icon: Star },
+    { id: 'alerts', label: t('alerts'), icon: Bell },
+    { id: 'assistant', label: t('aiAssistant'), icon: Sparkles },
   ];
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 min-h-screen">
+    <aside className={`w-64 border-r min-h-screen transition-colors duration-300 ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       <div className="p-6">
-        <h1 className="text-xl font-bold text-gray-800">PriceCompare</h1>
+        <h1 className={`text-xl font-bold ${theme === 'dark' ? 'text-white' : 'text-gray-800'}`}>{t('priceCompare')}</h1>
       </div>
 
       <nav className="px-3">
@@ -30,8 +35,8 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
               key={item.id}
               onClick={() => onViewChange(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${isActive
-                  ? 'bg-blue-50 text-blue-600'
-                  : 'text-gray-600 hover:bg-gray-50'
+                  ? (theme === 'dark' ? 'bg-blue-900/50 text-blue-400' : 'bg-blue-50 text-blue-600')
+                  : (theme === 'dark' ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-50')
                 }`}
             >
               <Icon size={20} />
