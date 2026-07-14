@@ -119,7 +119,7 @@ export function Dashboard() {
               <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('system')}</p>
               <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{t('active')}</p>
             </div>
-            <div className="p-3 bg-green-50 text-green-600 rounded-xl border border-green-100">
+            <div className={`p-3 rounded-xl border transition-colors duration-300 ${theme === 'dark' ? 'bg-green-900/30 text-green-400 border-green-800/50' : 'bg-green-50 text-green-600 border-green-100'}`}>
               <CheckCircle size={22} />
             </div>
           </div>
@@ -135,7 +135,7 @@ export function Dashboard() {
               <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('statsFavorites')}</p>
               <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.favorites}</p>
             </div>
-            <div className="p-3 bg-pink-50 text-pink-600 rounded-xl border border-pink-100">
+            <div className={`p-3 rounded-xl border transition-colors duration-300 ${theme === 'dark' ? 'bg-pink-900/30 text-pink-400 border-pink-800/50' : 'bg-pink-50 text-pink-600 border-pink-100'}`}>
               <Heart size={22} />
             </div>
           </div>
@@ -150,7 +150,7 @@ export function Dashboard() {
               <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('statsTotalAlerts')}</p>
               <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.alerts}</p>
             </div>
-            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl border border-amber-100">
+            <div className={`p-3 rounded-xl border transition-colors duration-300 ${theme === 'dark' ? 'bg-amber-900/30 text-amber-400 border-amber-800/50' : 'bg-amber-50 text-amber-600 border-amber-100'}`}>
               <TrendingUp size={22} />
             </div>
           </div>
@@ -165,7 +165,7 @@ export function Dashboard() {
               <p className={`text-sm font-medium ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('statsActiveAlerts')}</p>
               <p className={`text-2xl font-bold mt-1 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>{stats.activeAlerts}</p>
             </div>
-            <div className="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100">
+            <div className={`p-3 rounded-xl border transition-colors duration-300 ${theme === 'dark' ? 'bg-red-900/30 text-red-400 border-red-800/50' : 'bg-red-50 text-red-600 border-red-100'}`}>
               <AlertCircle size={22} />
             </div>
           </div>

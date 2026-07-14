@@ -32,11 +32,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
       <div className={`aspect-square relative overflow-hidden ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'}`}>
         {product.image && !imageError ? (
           <img
-            src={product.image}
-            alt={product.name}
-            onError={() => setImageError(true)}
-            className="w-full h-full object-contain mix-blend-multiply p-4 group-hover:scale-105 transition-transform duration-300"
-          />
+              src={product.image}
+              alt={product.name}
+              onError={() => setImageError(true)}
+              className={`w-full h-full object-contain p-4 group-hover:scale-105 transition-all duration-300 ${theme === 'dark' ? '' : 'mix-blend-multiply'}`}
+            />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Package className={theme === 'dark' ? 'text-gray-600' : 'text-gray-300'} size={48} />
@@ -45,11 +45,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
 
         <button
           onClick={handleToggleFavorite}
-          className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm hover:bg-white hover:scale-110 active:scale-90 transition-all duration-200 z-10 group/heart"
+          className={`absolute top-3 right-3 p-2 rounded-full shadow-sm hover:scale-110 active:scale-90 transition-all duration-200 z-10 group/heart ${theme === 'dark' ? 'bg-gray-800/80 backdrop-blur-sm hover:bg-gray-700' : 'bg-white/80 backdrop-blur-sm hover:bg-white'}`}
         >
           <Heart
             size={18}
-            className={`${isFav ? "text-red-500 fill-current" : `${theme === 'dark' ? 'text-gray-500 group-hover/heart:text-red-400' : 'text-gray-400 group-hover/heart:text-red-400'}`} transition-colors duration-200`}
+            className={`${isFav ? "text-red-500 fill-current" : `${theme === 'dark' ? 'text-gray-400 group-hover/heart:text-red-400' : 'text-gray-400 group-hover/heart:text-red-400'}`} transition-colors duration-200`}
           />
         </button>
       </div>
