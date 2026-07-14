@@ -44,3 +44,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# ML Models
+backend/ml_models/

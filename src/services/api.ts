@@ -240,4 +240,45 @@ export class ApiService {
       body: JSON.stringify({ product_id: productId, days: 30, min_entries: 12 }),
     });
   }
+
+  // --- ML / Price Prediction ---
+  static async trainPriceModel(payload: {
+    base_price: number;
+    days: number;
+    product_name: string;
+    model_name: string;
+  }): Promise<{
+    model_name: string;
+    metrics: { mae: number; rmse: number; r2: number };
+  }> {
+    const response = await fetch(`${API}/api/ml/train`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error('Model training failed');
+    return response.json();
+  }
+
+  static async predictPrices(payload: {
+    model_name: string;
+    days_ahead: number;
+  }): Promise<{
+    model_name: string;
+    predictions: Array<{ date: string; predicted_price: number }>;
+  }> {
+    const response = await fetch(`${API}/api/ml/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) throw new Error('Price prediction failed');
+    return response.json();
+  }
+
+  static async getModels(): Promise<{ models: string[] }> {
+    const response = await fetch(`${API}/api/ml/models`);
+    if (!response.ok) throw new Error('Get models failed');
+    return response.json();
+  }
 }

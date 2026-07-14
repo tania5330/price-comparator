@@ -8,10 +8,11 @@ import { SearchResults } from './views/SearchResults';
 import { Favorites } from './views/Favorites';
 import { Alerts } from './views/Alerts';
 import { AIAssistant } from './views/AIAssistant';
+import { MLPricePredictor } from './views/MLPricePredictor';
 import { AIFloatingChat } from './components/Layout/AIFloatingChat';
 import { useTheme } from './context/ThemeContext';
 
-type ViewType = 'dashboard' | 'search' | 'comparison' | 'favorites' | 'alerts' | 'settings' | 'assistant';
+type ViewType = 'dashboard' | 'search' | 'comparison' | 'favorites' | 'alerts' | 'settings' | 'assistant' | 'ml-predictor';
 
 function AppContent() {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
@@ -61,6 +62,8 @@ function AppContent() {
             onClearProductContext={() => setSelectedProductForChat(null)}
           />
         );
+      case 'ml-predictor':
+        return <MLPricePredictor />;
       case 'settings':
         return null; // Settings removed
       default:

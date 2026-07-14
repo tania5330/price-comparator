@@ -9,6 +9,7 @@ from .routes.favorites import router as favorites_router
 from .routes.alerts import router as alerts_router
 from .routes.ai import router as ai_router
 from .routes.demo import router as demo_router
+from .routes.ml import router as ml_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -19,10 +20,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Price Comparator API", version="1.0.0", lifespan=lifespan)
 
-# CORS - allow the Vite dev server
+# CORS - allow the Vite dev server and Streamlit
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173", 
+        "http://127.0.0.1:5173", 
+        "http://localhost:8501", 
+        "http://127.0.0.1:8501"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,6 +41,7 @@ app.include_router(favorites_router, prefix="/api", tags=["Favorites"])
 app.include_router(alerts_router, prefix="/api", tags=["Alerts"])
 app.include_router(ai_router, prefix="/api", tags=["AI"])
 app.include_router(demo_router, prefix="/api", tags=["Demo"])
+app.include_router(ml_router, prefix="/api", tags=["ML"])
 
 
 @app.get("/api/stats")

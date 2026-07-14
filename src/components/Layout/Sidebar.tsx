@@ -1,4 +1,4 @@
-import { LayoutDashboard, Search, Star, Bell, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Search, Star, Bell, Sparkles, Brain } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../context/I18nContext';
 
@@ -17,6 +17,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
     { id: 'favorites', label: t('favorites'), icon: Star },
     { id: 'alerts', label: t('alerts'), icon: Bell },
     { id: 'assistant', label: t('aiAssistant'), icon: Sparkles },
+    { id: 'ml-predictor', label: t('mlPricePredictor'), icon: Brain },
   ];
 
   return (
