@@ -9,7 +9,22 @@ from ..database import get_product, get_price_history
 
 router = APIRouter()
 
+# Manually load .env file from the root directory to populate environment variables
+_backend_dir = os.path.dirname(os.path.dirname(__file__))
+_root_dir = os.path.dirname(_backend_dir)
+_env_path = os.path.join(_root_dir, ".env")
+
+if os.path.exists(_env_path):
+    with open(_env_path, "r", encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _key, _val = _line.split("=", 1)
+                os.environ[_key.strip()] = _val.strip()
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+print("OPENAI_API_KEY cargada:", "SÍ" if OPENAI_API_KEY else "NO")
+
 
 
 # ─── Pydantic models ────────────────────────────────────────────────────────
