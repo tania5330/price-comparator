@@ -137,11 +137,11 @@ export function Alerts() {
     const chatId = import.meta.env.VITE_TELEGRAM_CHAT_ID;
 
     if (!token || !chatId) {
-      window.alert('Credenciales de Telegram no configuradas en .env');
+      window.alert('Credenciales de Telegram no configuradas en .env (se necesitan VITE_TELEGRAM_BOT_TOKEN y VITE_TELEGRAM_CHAT_ID)');
       return;
     }
 
-    let message = `🚨 *Alerta de Precio*\n\nProducto: ${alertItem.product_name}\nPrecio Objetivo: $${alertItem.target_price}\nCondición: ${getConditionText(alertItem.condition, alertItem.target_price)}`;
+    let message = `🚨 *Alerta de Precio de Prueba*\n\nProducto: ${alertItem.product_name}\nPrecio Objetivo: $${alertItem.target_price}\nCondición: ${getConditionText(alertItem.condition, alertItem.target_price)}`;
 
     if (alertItem.current_price > 0) {
       message += `\nPrecio Actual: $${alertItem.current_price}`;
@@ -165,14 +165,18 @@ export function Alerts() {
       });
 
       if (response.ok) {
-        console.log('Notificación enviada a Telegram');
+        window.alert('¡Notificación enviada a Telegram con éxito! Revisa tu chat.');
       } else {
-        console.error('Error al enviar notificación Telegram');
+        const errData = await response.json();
+        console.error('Error al enviar notificación Telegram:', errData);
+        window.alert(`Error de Telegram: ${errData.description || 'Código incorrecto'}`);
       }
     } catch (error) {
       console.error('Error sending telegram message:', error);
+      window.alert('Error de red al intentar conectarse con Telegram.');
     }
   };
+
 
   const getConditionText = (condition: string, targetPrice: number) => {
     const conditionMap: Record<string, string> = {

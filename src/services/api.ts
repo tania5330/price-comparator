@@ -80,7 +80,14 @@ export class ApiService {
     return response.json();
   }
 
+  static async getProductOpportunities(): Promise<any[]> {
+    const response = await fetch(`${API}/api/products/opportunities`);
+    if (!response.ok) return [];
+    return response.json();
+  }
+
   // --- Favorites ---
+
   static async getFavorites(): Promise<Favorite[]> {
     const response = await fetch(`${API}/api/favorites`);
     if (!response.ok) throw new Error('Favorites request failed');
@@ -194,5 +201,43 @@ export class ApiService {
     const response = await fetch(`${API}/api/price-history/${productId}`);
     if (!response.ok) return [];
     return response.json();
+  }
+
+  // --- AI Features ---
+  static async getAIPurchaseAdvice(productId: string): Promise<{
+    verdict: 'BUY' | 'WAIT' | 'HOLD';
+    reason: string;
+    tips: string[];
+  }> {
+    const response = await fetch(`${API}/api/ai/advisor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: productId }),
+    });
+    if (!response.ok) throw new Error('AI advisor request failed');
+    return response.json();
+  }
+
+  static async sendAIChatMessage(
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>,
+    productId?: string
+  ): Promise<string> {
+    const response = await fetch(`${API}/api/ai/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, product_id: productId ?? null }),
+    });
+    if (!response.ok) throw new Error('AI chat request failed');
+    const data = await response.json();
+    return data.reply as string;
+  }
+
+  // --- Demo / Seeder ---
+  static async seedPriceHistory(productId: string): Promise<void> {
+    await fetch(`${API}/api/demo/seed-history`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: productId, days: 30, min_entries: 12 }),
+    });
   }
 }

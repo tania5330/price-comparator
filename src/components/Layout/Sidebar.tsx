@@ -1,4 +1,4 @@
-import { LayoutDashboard, Search, Star, Bell, Settings } from 'lucide-react';
+import { LayoutDashboard, Search, Star, Bell, Sparkles } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
@@ -11,6 +11,7 @@ export function Sidebar({ currentView, onViewChange }: SidebarProps) {
     { id: 'search', label: 'Buscar', icon: Search },
     { id: 'favorites', label: 'Favoritos', icon: Star },
     { id: 'alerts', label: 'Alertas', icon: Bell },
+    { id: 'assistant', label: 'Asistente IA', icon: Sparkles },
   ];
 
   return (

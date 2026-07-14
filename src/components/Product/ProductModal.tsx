@@ -1,7 +1,9 @@
-import { X, ExternalLink, Heart, Bell, ShieldCheck, Truck, Store, Star } from 'lucide-react';
+import { useState } from 'react';
+import { X, ExternalLink, Heart, Bell, ShieldCheck, Truck, Store, Star, Printer, Package } from 'lucide-react';
 import { SearchResult } from '../../types';
 import { useFavorites } from '../../context/FavoritesContext';
 import { PriceHistoryChart } from './PriceHistoryChart';
+import { AIPurchaseAdvisor } from './AIPurchaseAdvisor';
 
 interface ProductModalProps {
     product: SearchResult;
@@ -14,6 +16,7 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
     // const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
 
     const isFav = isFavorite(product.id);
+    const [imageError, setImageError] = useState(false);
 
     const handleToggleFavorite = () => {
         if (isFav) {
@@ -21,6 +24,203 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
         } else {
             addFavorite(product);
         }
+    };
+
+    const handleExportReport = () => {
+        const printWindow = window.open('', '_blank');
+        if (!printWindow) return;
+
+        const productName = product.canonical_name || product.name;
+        const currentPrice = product.price ? `$${product.price.toLocaleString()}` : 'Ver precio';
+        const sourceName = product.source_name || 'Tienda';
+        const ratingInfo = product.rating ? `${product.rating} ⭐ (${product.reviews_count} reseñas)` : 'Sin calificaciones';
+
+        printWindow.document.write(`
+            <html>
+                <head>
+                    <title>Reporte de Compra IA - ${productName}</title>
+                    <style>
+                        body {
+                            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                            color: #1f2937;
+                            padding: 40px;
+                            max-width: 800px;
+                            margin: 0 auto;
+                        }
+                        .header {
+                            display: flex;
+                            align-items: center;
+                            justify-content: space-between;
+                            border-bottom: 2px solid #e5e7eb;
+                            padding-bottom: 20px;
+                            margin-bottom: 30px;
+                        }
+                        .logo {
+                            font-size: 24px;
+                            font-weight: 800;
+                            color: #2563eb;
+                        }
+                        .report-title {
+                            font-size: 14px;
+                            font-weight: 600;
+                            color: #6b7280;
+                            text-transform: uppercase;
+                            letter-spacing: 0.05em;
+                        }
+                        .product-container {
+                            display: flex;
+                            gap: 40px;
+                            margin-bottom: 30px;
+                        }
+                        .product-image {
+                            width: 200px;
+                            height: 200px;
+                            object-fit: contain;
+                            border: 1px solid #e5e7eb;
+                            border-radius: 16px;
+                            padding: 15px;
+                            background: #f9fafb;
+                        }
+                        .product-details {
+                            flex: 1;
+                        }
+                        .product-title {
+                            font-size: 22px;
+                            font-weight: 700;
+                            color: #111827;
+                            margin-top: 0;
+                            margin-bottom: 10px;
+                        }
+                        .store-tag {
+                            display: inline-block;
+                            background: #eff6ff;
+                            color: #2563eb;
+                            font-size: 12px;
+                            font-weight: 600;
+                            padding: 4px 12px;
+                            border-radius: 9999px;
+                            margin-bottom: 15px;
+                        }
+                        .price-box {
+                            background: #f3f4f6;
+                            padding: 15px 20px;
+                            border-radius: 16px;
+                            margin-bottom: 20px;
+                        }
+                        .current-price {
+                            font-size: 28px;
+                            font-weight: 800;
+                            color: #111827;
+                        }
+                        .rating-info {
+                            font-size: 14px;
+                            color: #4b5563;
+                            margin-top: 5px;
+                        }
+                        .ai-section {
+                            background: #f5f3ff;
+                            border: 1px solid #ddd6fe;
+                            border-radius: 16px;
+                            padding: 25px;
+                            margin-top: 30px;
+                        }
+                        .ai-header {
+                            font-weight: 700;
+                            color: #5b21b6;
+                            font-size: 16px;
+                            margin-bottom: 15px;
+                            display: flex;
+                            align-items: center;
+                            gap: 10px;
+                        }
+                        .ai-tips {
+                            margin-top: 15px;
+                            padding-left: 20px;
+                            margin-bottom: 0;
+                        }
+                        .ai-tips li {
+                            font-size: 14px;
+                            color: #4b5563;
+                            margin-bottom: 8px;
+                        }
+                        .footer {
+                            margin-top: 50px;
+                            border-top: 1px solid #e5e7eb;
+                            padding-top: 20px;
+                            text-align: center;
+                            font-size: 12px;
+                            color: #9ca3af;
+                        }
+                        @media print {
+                            body { padding: 0; }
+                            .no-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <div class="logo">PriceCompare</div>
+                        <div class="report-title">Reporte IA de Compra Inteligente</div>
+                    </div>
+                    
+                    <div class="product-container">
+                        <img src="${product.image}" class="product-image" onerror="this.style.display='none'" />
+                        <div class="product-details">
+                            <span class="store-tag">Ofrecido por ${sourceName}</span>
+                            <h1 class="product-title">${productName}</h1>
+                            <div class="price-box">
+                                <div class="current-price">${currentPrice}</div>
+                                <div class="rating-info">${ratingInfo}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="ai-section">
+                        <div class="ai-header">🔮 Análisis de Inteligencia Artificial (ChatGPT)</div>
+                        <div id="ai-verdict-target">
+                            <p style="font-size: 14px; color: #4b5563;">
+                                Cargando veredicto de compra y recomendaciones detalladas...
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="footer">
+                        Reporte generado por PriceCompare el ${new Date().toLocaleDateString()} a las ${new Date().toLocaleTimeString()}.
+                    </div>
+
+                    <script>
+                        if (window.opener) {
+                            // Find the parent's recommendation card text contents
+                            const parentCard = window.opener.document.querySelector('.border.rounded-2xl.p-5');
+                            if (parentCard) {
+                                const title = parentCard.querySelector('.tracking-wider')?.textContent || 'RECOMENDACIÓN';
+                                const desc = parentCard.querySelector('p.text-sm')?.textContent || '';
+                                const reason = parentCard.querySelector('p.text-xs')?.textContent || '';
+                                const tipsLi = Array.from(parentCard.querySelectorAll('ul li')).map(li => li.textContent);
+                                
+                                let tipsHtml = '';
+                                if (tipsLi.length > 0) {
+                                    tipsHtml = '<ul class="ai-tips">' + tipsLi.map(t => '<li>' + t + '</li>').join('') + '</ul>';
+                                }
+
+                                document.getElementById('ai-verdict-target').innerHTML = 
+                                    '<p style="color: #6d28d9; font-weight: 800; font-size: 16px; margin: 0 0 10px 0;">VEREDICTO: ' + title + '</p>' +
+                                    '<p style="font-weight: 650; margin: 0 0 8px 0; font-size: 15px;">' + desc + '</p>' +
+                                    '<p style="font-size: 14px; color: #374151; line-height: 1.5; margin: 0;">' + reason + '</p>' +
+                                    tipsHtml;
+                            }
+                        }
+                        
+                        window.onload = function() {
+                            setTimeout(function() {
+                                window.print();
+                            }, 500);
+                        };
+                    </script>
+                </body>
+            </html>
+        `);
+        printWindow.document.close();
     };
 
     return (
@@ -41,11 +241,16 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
                     {/* Image Section */}
                     <div className="relative bg-gray-50 p-8 flex items-center justify-center min-h-[300px] md:min-h-[500px]">
-                        <img
-                            src={product.image}
-                            alt={product.name}
-                            className="max-w-full max-h-[400px] object-contain mix-blend-multiply"
-                        />
+                        {product.image && !imageError ? (
+                            <img
+                                src={product.image}
+                                alt={product.name}
+                                onError={() => setImageError(true)}
+                                className="max-w-full max-h-[400px] object-contain mix-blend-multiply"
+                            />
+                        ) : (
+                            <Package className="text-gray-300" size={80} />
+                        )}
                         {product.old_price && (product.price || product.bestPrice) && (
                             <div className="absolute top-6 left-6 bg-red-500 text-white px-3 py-1 rounded-full text-sm font-bold shadow-lg">
                                 -{Math.round(((product.old_price - (product.price || product.bestPrice || 0)) / product.old_price) * 100)}%
@@ -101,10 +306,18 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
                             <div className="grid grid-cols-2 gap-3 mb-6">
                                 <button
                                     onClick={() => window.open(product.product_link, '_blank')}
-                                    className="col-span-2 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 hover:-translate-y-0.5"
+                                    className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 hover:-translate-y-0.5"
                                 >
                                     <ExternalLink size={20} />
                                     Ver oferta
+                                </button>
+
+                                <button
+                                    onClick={handleExportReport}
+                                    className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-xl font-semibold transition-all shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 hover:-translate-y-0.5"
+                                >
+                                    <Printer size={20} />
+                                    Reporte IA
                                 </button>
 
                                 <button
@@ -128,6 +341,15 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
                             </div>
                         </div>
 
+                        {/* AI Purchase Advisor */}
+                        <div className="border-t pt-6 mb-6">
+                            <AIPurchaseAdvisor
+                                productId={product.id}
+                                productName={product.canonical_name || product.name}
+                                onCloseModal={onClose}
+                            />
+                        </div>
+
                         {/* Price History Chart */}
                         <div className="border-t pt-6">
                             <PriceHistoryChart
@@ -141,3 +363,4 @@ export function ProductModal({ product, onClose }: ProductModalProps) {
         </div>
     );
 }
+

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Package, Star, Heart } from 'lucide-react';
 import { SearchResult } from '../../types';
 import { useFavorites } from '../../context/FavoritesContext';
@@ -10,6 +11,7 @@ interface ProductCardProps {
 export function ProductCard({ product, onSelect }: ProductCardProps) {
   const { isFavorite, addFavorite, removeFavorite } = useFavorites();
   const isFav = isFavorite(product.id);
+  const [imageError, setImageError] = useState(false);
 
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -26,10 +28,11 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
       className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col h-full relative"
     >
       <div className="aspect-square bg-gray-50 relative overflow-hidden">
-        {product.image ? (
+        {product.image && !imageError ? (
           <img
             src={product.image}
             alt={product.name}
+            onError={() => setImageError(true)}
             className="w-full h-full object-contain mix-blend-multiply p-4 group-hover:scale-105 transition-transform duration-300"
           />
         ) : (
@@ -37,6 +40,7 @@ export function ProductCard({ product, onSelect }: ProductCardProps) {
             <Package className="text-gray-300" size={48} />
           </div>
         )}
+
         <button
           onClick={handleToggleFavorite}
           className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur-sm rounded-full shadow-sm hover:bg-white hover:scale-110 active:scale-90 transition-all duration-200 z-10 group/heart"

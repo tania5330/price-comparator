@@ -7,6 +7,8 @@ from .routes.search import router as search_router
 from .routes.products import router as products_router
 from .routes.favorites import router as favorites_router
 from .routes.alerts import router as alerts_router
+from .routes.ai import router as ai_router
+from .routes.demo import router as demo_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -31,6 +33,8 @@ app.include_router(search_router, prefix="/api", tags=["Search"])
 app.include_router(products_router, prefix="/api", tags=["Products"])
 app.include_router(favorites_router, prefix="/api", tags=["Favorites"])
 app.include_router(alerts_router, prefix="/api", tags=["Alerts"])
+app.include_router(ai_router, prefix="/api", tags=["AI"])
+app.include_router(demo_router, prefix="/api", tags=["Demo"])
 
 
 @app.get("/api/stats")
