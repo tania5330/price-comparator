@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { ApiService } from '../services/api';
-import { Sparkles, Send, Bot, User, Trash2, X, AlertCircle } from 'lucide-react';
+import { Sparkles, Send, Bot, User, Trash2, X, AlertCircle, Mic, MicOff, Volume2 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 import { useI18n } from '../context/I18nContext';
+
+declare global {
+  interface Window {
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
+  }
+}
 
 interface ProductContext {
   id: string;
@@ -31,8 +38,11 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [productContext, setProductContext] = useState<ProductContext | null>(initialProductContext);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     setProductContext(initialProductContext);
@@ -97,6 +107,58 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
     onClearProductContext();
   };
 
+  const getLastAssistantMessage = () => {
+    return [...messages].reverse().find((message) => message.role === 'assistant')?.content ?? '';
+  };
+
+  const speakLastAnswer = () => {
+    const text = getLastAssistantMessage();
+    if (!text || !('speechSynthesis' in window)) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\*\*/g, ''));
+    utterance.lang = 'es-PE';
+    utterance.rate = 1;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition || isLoading) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-PE';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? '';
+      setInput(transcript);
+      if (transcript.trim()) {
+        handleSend(transcript);
+      }
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    recognition.start();
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop?.();
+    setIsListening(false);
+  };
+
   const suggestions = [
     t('aiSug1'),
     t('aiSug2'),
@@ -117,13 +179,30 @@ export function AIAssistant({ initialProductContext, onClearProductContext }: AI
             <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{t('aiSubtitle')}</p>
           </div>
         </div>
-        <button
-          onClick={handleClearChat}
-          title={t('aiClearBtn')}
-          className={`p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={isListening ? stopListening : startListening}
+            title={isListening ? 'Detener voz' : 'Hablar con el asistente'}
+            disabled={isLoading}
+            className={`p-2 rounded-xl transition-all ${isListening ? 'bg-red-600 text-white' : theme === 'dark' ? 'text-gray-400 hover:text-indigo-300 hover:bg-indigo-900/20' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'} disabled:opacity-50`}
+          >
+            {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+          </button>
+          <button
+            onClick={isSpeaking ? stopSpeaking : speakLastAnswer}
+            title={isSpeaking ? 'Detener lectura' : 'Leer última respuesta'}
+            className={`p-2 rounded-xl transition-all ${isSpeaking ? 'bg-indigo-600 text-white' : theme === 'dark' ? 'text-gray-400 hover:text-indigo-300 hover:bg-indigo-900/20' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'}`}
+          >
+            <Volume2 size={18} />
+          </button>
+          <button
+            onClick={handleClearChat}
+            title={t('aiClearBtn')}
+            className={`p-2 rounded-xl transition-all ${theme === 'dark' ? 'text-gray-400 hover:text-red-400 hover:bg-red-900/20' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Product Context Banner */}

@@ -1,5 +1,14 @@
 import { ENV } from '../config/env';
-import { Product, ProductPrice, SearchResult, PriceAlert, Favorite } from '../types';
+import {
+  Favorite,
+  MLModelSummary,
+  MLPrediction,
+  MLTrainingResult,
+  PriceAlert,
+  Product,
+  ProductPrice,
+  SearchResult
+} from '../types';
 
 const API = ENV.apiUrl;
 
@@ -243,14 +252,20 @@ export class ApiService {
 
   // --- ML / Price Prediction ---
   static async trainPriceModel(payload: {
-    base_price: number;
-    days: number;
-    product_name: string;
+    product_id?: string;
+    dataset_records?: Array<Record<string, unknown>>;
+    base_price?: number;
+    days?: number;
+    product_name?: string;
     model_name: string;
-  }): Promise<{
-    model_name: string;
-    metrics: { mae: number; rmse: number; r2: number };
-  }> {
+    sequence_length?: number;
+    epochs?: number;
+    batch_size?: number;
+    validation_splits?: number;
+    stability_runs?: number;
+    model_types?: string[];
+    max_trials?: number;
+  }): Promise<MLTrainingResult> {
     const response = await fetch(`${API}/api/ml/train`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -262,10 +277,12 @@ export class ApiService {
 
   static async predictPrices(payload: {
     model_name: string;
+    product_id?: string;
     days_ahead: number;
+    base_price?: number;
   }): Promise<{
     model_name: string;
-    predictions: Array<{ date: string; predicted_price: number }>;
+    predictions: MLPrediction[];
   }> {
     const response = await fetch(`${API}/api/ml/predict`, {
       method: 'POST',
@@ -276,9 +293,18 @@ export class ApiService {
     return response.json();
   }
 
-  static async getModels(): Promise<{ models: string[] }> {
+  static async getModels(): Promise<{ models: MLModelSummary[] }> {
     const response = await fetch(`${API}/api/ml/models`);
     if (!response.ok) throw new Error('Get models failed');
+    return response.json();
+  }
+
+  static async getModelReport(modelName: string): Promise<{
+    metadata: Record<string, unknown>;
+    report_markdown: string;
+  }> {
+    const response = await fetch(`${API}/api/ml/models/${encodeURIComponent(modelName)}/report`);
+    if (!response.ok) throw new Error('Get model report failed');
     return response.json();
   }
 }
