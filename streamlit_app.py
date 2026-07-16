@@ -15,8 +15,13 @@ st.caption("EDA, entrenamiento, validación cruzada, estabilidad, reportes y con
 st.info("En Render, el entrenamiento usa una demo GRU acotada (5 epochs, 120 días, 2 divisiones temporales). Sus artefactos son temporales en almacenamiento efímero; el bootstrap permanece durable. El laboratorio local conserva EDA, CV y reportes académicos.")
 
 
-def api_post(path: str, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict:
-    response = httpx.post(f"{FASTAPI_URL}{path}", json=payload, headers=headers, timeout=180.0)
+def api_post(
+    path: str,
+    payload: dict[str, Any],
+    headers: dict[str, str] | None = None,
+    timeout: float = 180.0,
+) -> dict:
+    response = httpx.post(f"{FASTAPI_URL}{path}", json=payload, headers=headers, timeout=timeout)
     if response.is_error:
         detail = response.json().get("detail") if response.headers.get("content-type", "").startswith("application/json") else None
         raise RuntimeError(detail or f"HTTP {response.status_code}")
@@ -143,7 +148,7 @@ with tab_train:
         with st.spinner("Entrenando demo GRU, validando y guardando .h5..."):
             try:
                 headers = {"X-ML-Training-Key": training_key} if training_key else None
-                result = api_post("/api/ml/train", payload, headers=headers)
+                result = api_post("/api/ml/train", payload, headers=headers, timeout=420.0)
                 st.session_state.last_training_result = result
                 st.session_state.prediction_model = result["model_name"]
                 st.success(f"Modelo temporal entrenado: {result['model_name']}")
