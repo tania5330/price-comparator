@@ -46,4 +46,12 @@ wheels/
 *.egg
 
 # ML Models
-backend/ml_models/
+backend/ml_models/*
+!backend/ml_models/bootstrap_price_forecaster.h5
+!backend/ml_models/bootstrap_price_forecaster_scalers.joblib
+!backend/ml_models/bootstrap_price_forecaster_metadata.json
+!backend/ml_models/bootstrap_price_forecaster_metrics.json
+!backend/ml_models/reports/
+backend/ml_models/reports/*
+!backend/ml_models/reports/bootstrap_price_forecaster_report.md
+!backend/ml_models/reports/bootstrap_price_forecaster_report.html

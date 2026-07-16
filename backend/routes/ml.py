@@ -1,111 +1,184 @@
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
-from typing import Optional, List, Dict
 import os
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import ml_model
+from ..database import get_price_history, get_product
+
 
 router = APIRouter()
 
-# ------------------------------
-# Schemas Pydantic
-# ------------------------------
+
+def _enabled(setting: str, default: bool = True) -> bool:
+    value = os.getenv(setting)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 class TrainModelRequest(BaseModel):
-    base_price: float
+    model_config = ConfigDict(protected_namespaces=())
+
+    product_id: Optional[str] = None
+    dataset_records: Optional[List[Dict[str, Any]]] = None
+    base_price: Optional[float] = 100
     days: int = 180
-    product_name: str = "Producto Genérico"
+    product_name: str = "Producto X"
     model_name: str = "price_predictor"
+    sequence_length: int = Field(default=14, ge=3, le=60)
+    epochs: int = Field(default=20, ge=5, le=200)
+    batch_size: int = Field(default=8, ge=1, le=128)
+    validation_splits: int = Field(default=3, ge=2, le=5)
+    stability_runs: int = Field(default=3, ge=1, le=5)
+    model_types: List[str] = Field(default_factory=lambda: ["gru", "lstm", "mlp"])
+    max_trials: int = Field(default=4, ge=1, le=12)
 
 
 class PredictRequest(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_name: str = "price_predictor"
-    days_ahead: int = 7
+    product_id: Optional[str] = None
+    days_ahead: int = Field(default=7, ge=1, le=30)
+    base_price: Optional[float] = None
 
 
-# ------------------------------
-# Endpoints
-# ------------------------------
+def _training_data_source(request: TrainModelRequest) -> str:
+    if request.dataset_records is not None:
+        return "uploaded_dataset"
+    if request.product_id:
+        return "database_price_history"
+    return "synthetic_generator"
+
+
+def _build_training_frame(request: TrainModelRequest) -> tuple[pd.DataFrame, str, float | None]:
+    if request.dataset_records is not None:
+        return pd.DataFrame(request.dataset_records), request.product_name, request.base_price
+
+    if request.product_id:
+        product = get_product(request.product_id) or {}
+        product_name = product.get("name") or request.product_name
+        base_price = product.get("price") or request.base_price
+        history = get_price_history(request.product_id)
+        return ml_model.history_to_dataframe(history, product_name), product_name, base_price
+
+    return (
+        ml_model.generate_historical_prices(
+            base_price=request.base_price or 100,
+            days=request.days,
+            product_name=request.product_name,
+        ),
+        request.product_name,
+        request.base_price,
+    )
+
+
+def _build_prediction_frame(request: PredictRequest) -> tuple[pd.DataFrame, str, float | None]:
+    if request.product_id:
+        product = get_product(request.product_id) or {}
+        product_name = product.get("name") or "Product"
+        base_price = product.get("price") or request.base_price
+        history = get_price_history(request.product_id)
+        return ml_model.history_to_dataframe(history, product_name), product_name, base_price
+
+    base_price = request.base_price or 100
+    return ml_model.generate_historical_prices(base_price=base_price), "Product", base_price
+
+
 @router.post("/ml/train")
 async def train_model(request: TrainModelRequest):
-    """Entrena un modelo de predicción de precios"""
+    if not _enabled("ML_TRAINING_ENABLED"):
+        raise HTTPException(status_code=403, detail="ML training is disabled for this deployment.")
     try:
-        df = ml_model.generate_historical_prices(
-            base_price=request.base_price,
+        df, product_name, base_price = _build_training_frame(request)
+        data_source = _training_data_source(request)
+        result = ml_model.train_model_suite(
+            df=df,
+            model_name=request.model_name,
+            base_price=base_price,
             days=request.days,
-            product_name=request.product_name
+            product_name=product_name,
+            sequence_length=request.sequence_length,
+            epochs=request.epochs,
+            batch_size=request.batch_size,
+            validation_splits=request.validation_splits,
+            stability_runs=request.stability_runs,
+            model_types=request.model_types,
+            max_trials=request.max_trials,
+            data_source=data_source,
         )
-        result = ml_model.train_price_prediction_model(df, model_name=request.model_name)
-        
         return {
             "status": "success",
-            "model_name": request.model_name,
-            "metrics": {
-                "mae": result["metrics"]["mae"],
-                "rmse": result["metrics"]["rmse"],
-                "r2": result["metrics"]["r2"]
-            }
+            "model_name": result["model_name"],
+            "best_model": result["best_model"],
+            "metrics": result["metrics"],
+            "baseline": result["baseline"],
+            "cross_validation": result["cross_validation"],
+            "stability": result["stability"],
+            "statistical_tests": result["statistical_tests"],
+            "eda": result["eda"],
+            "data_source": result["data_source"],
+            "artifact_paths": result["artifact_paths"],
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al entrenar el modelo: {str(e)}")
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al entrenar el modelo: {str(exc)}")
 
 
 @router.post("/ml/predict")
 async def predict_prices(request: PredictRequest):
-    """Predice precios futuros usando un modelo entrenado"""
     try:
-        loaded = ml_model.load_model(request.model_name)
-        if not loaded:
-            # Si no hay modelo entrenado, entrenar uno con valores predeterminados
-            df = ml_model.generate_historical_prices(base_price=100, days=180)
-            result = ml_model.train_price_prediction_model(df, request.model_name)
-            loaded = {"model": result["model"], "scaler": result["scaler"]}
-            
-        predictions = ml_model.predict_future_prices(
-            loaded["model"],
-            loaded["scaler"],
-            days_ahead=request.days_ahead
+        df, product_name, base_price = _build_prediction_frame(request)
+        predictions = ml_model.predict_with_neural_model(
+            model_name=request.model_name,
+            df=df,
+            days_ahead=request.days_ahead,
+            base_price=base_price,
+            product_name=product_name,
         )
-        
         return {
             "status": "success",
             "model_name": request.model_name,
-            "predictions": predictions
+            "predictions": predictions,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al realizar la predicción: {str(e)}")
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al realizar la predicción: {str(exc)}")
 
 
 @router.get("/ml/models")
 async def list_models():
-    """Lista todos los modelos guardados"""
     try:
-        model_dir = ml_model.MODEL_DIR
-        if not os.path.exists(model_dir):
-            return {"models": []}
-        
-        models = [
-            f.replace(".joblib", "") 
-            for f in os.listdir(model_dir) 
-            if f.endswith(".joblib") and not f.endswith("_scaler.joblib")
-        ]
-        
-        return {"models": models}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al listar modelos: {str(e)}")
+        return {"models": ml_model.list_model_artifacts()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al listar modelos: {str(exc)}")
+
+
+@router.get("/ml/models/{model_name}/report")
+async def get_model_report(model_name: str):
+    report = ml_model.get_model_report(model_name)
+    if not report:
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    return report
 
 
 @router.delete("/ml/models/{model_name}")
 async def delete_model(model_name: str):
-    """Elimina un modelo guardado"""
+    if not _enabled("ML_MODEL_DELETE_ENABLED"):
+        raise HTTPException(status_code=403, detail="ML model deletion is disabled for this deployment.")
     try:
-        model_path = os.path.join(ml_model.MODEL_DIR, f"{model_name}.joblib")
-        scaler_path = os.path.join(ml_model.MODEL_DIR, f"{model_name}_scaler.joblib")
-        
-        if os.path.exists(model_path):
-            os.remove(model_path)
-        if os.path.exists(scaler_path):
-            os.remove(scaler_path)
-            
-        return {"status": "success", "message": f"Modelo {model_name} eliminado"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error al eliminar el modelo: {str(e)}")
+        deleted = ml_model.delete_model_artifacts(model_name)
+        return {
+            "status": "success",
+            "message": f"Modelo {model_name} eliminado",
+            "deleted_files": deleted,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Error al eliminar el modelo: {str(exc)}")
