@@ -32,6 +32,8 @@ services:
         value: "false"
       - key: ML_MODEL_DELETE_ENABLED
         value: "false"
+      - key: ALLOWED_ORIGINS
+        value: https://price-comparator-dghc.onrender.com
 
   - type: web
     name: price-comparator-ml-lab
