@@ -22,7 +22,6 @@ def main():
 
     # Rutas
     project_root = os.path.dirname(os.path.abspath(__file__))
-    backend_dir = os.path.join(project_root, "backend")
 
     # Lista de procesos
     processes = []
@@ -30,8 +29,8 @@ def main():
     try:
         # 1. Iniciar FastAPI (backend)
         processes.append(run_command(
-            "python -m uvicorn main:app --reload",
-            cwd=backend_dir,
+            "python -m uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000",
+            cwd=project_root,
             label="FastAPI (http://localhost:8000)"
         ))
 
