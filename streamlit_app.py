@@ -1,241 +1,235 @@
-import streamlit as st
-import httpx
+import json
 import os
+from typing import Any
+
+import httpx
 import pandas as pd
-from datetime import datetime
-
-# Configuración de la API
-FASTAPI_URL = "http://localhost:8000"
-
-# Título de la app
-st.set_page_config(page_title="Price Comparator - Streamlit", page_icon="💰")
-
-st.title("💰 Comparador de Precios - Streamlit")
-
-# Sidebar
-st.sidebar.header("Opciones")
-
-# Pestañas principales
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 Búsqueda", "⭐ Favoritos", "🔔 Alertas", "🤖 AI Assistant", "📊 Predicción de Precios"])
+import streamlit as st
 
 
-# --- Pestaña 1: Búsqueda de productos
-with tab1:
-    st.header("Buscar productos")
-    
-    query = st.text_input("Nombre del producto")
-    location = st.text_input("Ubicación (opcional)", placeholder="USA")
+FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 
-    if st.button("Buscar") and query:
-        with st.spinner("Buscando productos..."):
-            try:
-                response = httpx.post(
-                    f"{FASTAPI_URL}/api/search",
-                    json={"query": query, "location": location}
-                )
-                results = response.json()
-
-                if results:
-                    st.subheader("Resultados de la búsqueda")
-                    for product in results:
-                        with st.container():
-                            col1, col2 = st.columns([1, 3])
-                        
-                        with col1:
-                            if product.get("image"):
-                                st.image(product["image"], width=150)
-                            else:
-                                st.markdown("📦")
-
-                        with col2:
-                            st.write(f"**{product.get('name', 'N/A')}**")
-                            st.write(f"Precio: ${product.get('price', 'N/A')}")
-                            st.write(f"Fuente: {product.get('source_name', 'N/A')}")
-                            if product.get('old_price'):
-                                st.write(f"Precio anterior: ~~${product['old_price']}~~")
-                            if st.button(f"Ver detalles de {product.get('name')[:20]}...", key=f"view_{product.get('id')}"):
-                                st.write(product)
-
-            except Exception as e:
-                st.error(f"Error al buscar productos: {str(e)}")
+st.set_page_config(page_title="Price Comparator ML Lab", page_icon="🧠", layout="wide")
+st.title("🧠 Laboratorio de Redes Neuronales")
+st.caption("EDA, entrenamiento, validación cruzada, estabilidad, reportes y consumo del mejor modelo .h5.")
+st.info("El entrenamiento y la eliminación de modelos están habilitados para el laboratorio local. En Render, la API publica solo inferencia con el modelo bootstrap.")
 
 
-# --- Pestaña 2: Favoritos
-with tab2:
-    st.header("Tus productos favoritos")
-    if st.button("Recargar favoritos"):
+def api_post(path: str, payload: dict[str, Any]) -> dict:
+    response = httpx.post(f"{FASTAPI_URL}{path}", json=payload, timeout=180.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def api_get(path: str) -> dict:
+    response = httpx.get(f"{FASTAPI_URL}{path}", timeout=60.0)
+    response.raise_for_status()
+    return response.json()
+
+
+def local_eda(df: pd.DataFrame):
+    st.subheader("EDA del dataset")
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("Filas", len(df))
+    col_b.metric("Columnas", len(df.columns))
+    col_c.metric("Nulos", int(df.isna().sum().sum()))
+
+    st.write("Vista previa")
+    st.dataframe(df.head(20), use_container_width=True)
+
+    numeric_cols = df.select_dtypes(include="number").columns.tolist()
+    if numeric_cols:
+        st.write("Resumen estadístico")
+        st.dataframe(df[numeric_cols].describe(), use_container_width=True)
+
+    if {"date", "price"}.issubset(df.columns):
+        chart_df = df.copy()
+        chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
+        chart_df["price"] = pd.to_numeric(chart_df["price"], errors="coerce")
+        chart_df = chart_df.dropna(subset=["date", "price"]).sort_values("date")
+        if not chart_df.empty:
+            st.line_chart(chart_df, x="date", y="price")
+    elif {"recorded_at", "price"}.issubset(df.columns):
+        chart_df = df.rename(columns={"recorded_at": "date"}).copy()
+        chart_df["date"] = pd.to_datetime(chart_df["date"], errors="coerce")
+        chart_df["price"] = pd.to_numeric(chart_df["price"], errors="coerce")
+        chart_df = chart_df.dropna(subset=["date", "price"]).sort_values("date")
+        if not chart_df.empty:
+            st.line_chart(chart_df, x="date", y="price")
+
+
+with st.sidebar:
+    st.header("Conexión")
+    st.code(FASTAPI_URL)
+    if st.button("Probar FastAPI"):
         try:
-            response = httpx.get(f"{FASTAPI_URL}/api/favorites")
-            favorites = response.json()
-            if favorites:
-                for fav in favorites:
-                    st.subheader(fav.get("product_name", "N/A"))
-                    st.write(f"ID: {fav.get('product_id')}")
-                    st.write(f"Precio actual: ${fav.get('current_price', 'N/A')}")
-            else:
-                st.info("No tienes productos favoritos aún!")
-        except Exception as e:
-            st.error(f"Error al cargar favoritos: {str(e)}")
+            health = api_get("/health")
+            st.success(f"FastAPI OK: {health}")
+        except Exception as exc:
+            st.error(f"No se pudo conectar: {exc}")
 
 
-# --- Pestaña 3: Alertas
-with tab3:
-    st.header("Alertas de precio")
-
-    # Crear nueva alerta
-    st.subheader("Crear nueva alerta")
-    with st.form("alert_form"):
-        product_name = st.text_input("Nombre del producto")
-        target_price = st.number_input("Precio objetivo", min_value=0.0, step=0.01)
-        condition = st.selectbox("Condición", ["below", "above", "equals"])
-        submit_alert = st.form_submit_button("Crear alerta")
-
-    if submit_alert:
-        try:
-            response = httpx.post(
-                f"{FASTAPI_URL}/api/alerts",
-                json={
-                    "product_name": product_name,
-                    "target_price": target_price,
-                    "condition": condition,
-                    "is_active": True,
-                    "current_price": 0
-                }
-            )
-            if response.status_code == 200:
-                st.success("Alerta creada exitosamente!")
-            else:
-                st.error(f"Error al crear alerta")
-        except Exception as e:
-            st.error(f"Error al crear alerta: {str(e)}")
-
-    # Ver alertas existentes
-    if st.button("Recargar alertas"):
-        try:
-            response = httpx.get(f"{FASTAPI_URL}/api/alerts")
-            alerts = response.json()
-            if alerts:
-                for alert in alerts:
-                    with st.expander(f"Alerta para {alert.get('product_name')}"):
-                        st.write(f"Precio objetivo: ${alert.get('target_price')}")
-                        st.write(f"Condición: {alert.get('condition')}")
-                        st.write(f"Estado: {'Activa' if alert.get('is_active') else 'Pausada'}")
-            else:
-                st.info("No tienes alertas configuradas!")
-        except Exception as e:
-            st.error(f"Error al cargar alertas: {str(e)}")
+tab_data, tab_train, tab_predict, tab_reports, tab_chat = st.tabs([
+    "1. Dataset y EDA",
+    "2. Entrenamiento",
+    "3. Predicción",
+    "4. Reportes",
+    "5. Chatbot escrito",
+])
 
 
-# --- Pestaña 4: AI Assistant
-with tab4:
-    st.header("Asistente de compras AI")
-    user_input = st.text_area("Pregunta lo que quieras sobre productos o precios")
-    if st.button("Enviar"):
-        with st.spinner("Pensando..."):
-            try:
-                response = httpx.post(
-                    f"{FASTAPI_URL}/api/ai/chat",
-                    json={"message": user_input}
-                )
-                ai_response = response.json()
-                st.write(f"🤖: {ai_response.get('response', 'No hay respuesta disponible')}")
-            except Exception as e:
-            st.error(f"Error al comunicarse con el AI: {str(e)}")
+if "dataset_records" not in st.session_state:
+    st.session_state.dataset_records = None
+if "last_training_result" not in st.session_state:
+    st.session_state.last_training_result = None
 
 
-# --- Pestaña 5: Predicción de Precios (ML)
-with tab5:
-    st.header("🤖 Predicción de Precios con Machine Learning")
-    
-    st.markdown("""
-        Esta herramienta usa un modelo de ML para predecir precios futuros basados en datos históricos sintéticos.
-    """)
+with tab_data:
+    st.header("Leer dataset")
+    st.write("Subí un CSV con columnas `date` o `recorded_at` y `price`, o entrená desde el historial guardado en PostgreSQL.")
+    uploaded_file = st.file_uploader("Dataset CSV", type=["csv"])
+    if uploaded_file:
+        dataset = pd.read_csv(uploaded_file)
+        st.session_state.dataset_records = json.loads(dataset.to_json(orient="records"))
+        local_eda(dataset)
+    else:
+        st.info("Sin CSV cargado: el entrenamiento puede usar `product_id` desde la base de datos o datos sintéticos de respaldo.")
 
-    col1, col2 = st.columns(2)
-    
+
+with tab_train:
+    st.header("Entrenamiento y selección de mejor modelo")
+    col1, col2, col3 = st.columns(3)
     with col1:
-        st.subheader("Entrenar modelo")
-        base_price = st.number_input("Precio base del producto", min_value=1, value=100, step=1)
-        days = st.slider("Días de datos históricos", min_value=30, max_value=365, value=180)
-        product_name = st.text_input("Nombre del producto", value="Producto X")
         model_name = st.text_input("Nombre del modelo", value="price_predictor")
-        
-        if st.button("Entrenar modelo"):
-            with st.spinner("Entrenando modelo..."):
-                try:
-                    response = httpx.post(
-                        f"{FASTAPI_URL}/api/ml/train",
-                        json={
-                            "base_price": base_price,
-                            "days": days,
-                            "product_name": product_name,
-                            "model_name": model_name
-                        }
-                    )
-                    result = response.json()
-                    st.success(f"✅ Modelo entrenado exitosamente!")
-                    st.metric("MAE", f"${result['metrics']['mae']:.2f}")
-                    st.metric("RMSE", f"${result['metrics']['rmse']:.2f}")
-                    st.metric("R²", f"{result['metrics']['r2']:.2f}")
-                except Exception as e:
-                    st.error(f"Error al entrenar el modelo: {str(e)}")
-
+        product_id = st.text_input("ID de producto en DB", value="")
+        product_name = st.text_input("Nombre del producto", value="Producto X")
     with col2:
-        st.subheader("Predecir precios")
-        pred_model_name = st.text_input("Nombre del modelo para predicción", value="price_predictor")
-        days_ahead = st.slider("Días a predecir", min_value=1, max_value=30, value=7)
-        if st.button("Predecir"):
-            with st.spinner("Realizando predicciones..."):
-                try:
-                    response = httpx.post(
-                        f"{FASTAPI_URL}/api/ml/predict",
-                        json={
-                            "model_name": pred_model_name,
-                            "days_ahead": days_ahead
-                        }
-                    )
-                    result = response.json()
-                    st.success("✅ Predicciones generadas!")
-                    
-                    # Mostrar tabla de predicciones
-                    predictions = result['predictions']
-                    
-                    # Convertir a DataFrame para el gráfico
-                    df_pred = pd.DataFrame(predictions)
-                    df_pred['date'] = pd.to_datetime(df_pred['date'])
-                    
-                    st.line_chart(data=df_pred, x='date', y='predicted_price')
-                    st.subheader("Predicciones detalladas")
-                    st.write(predictions)
-                    
-                except Exception as e:
-                    st.error(f"Error al realizar la predicción: {str(e)}")
+        base_price = st.number_input("Precio base", min_value=1.0, value=100.0, step=1.0)
+        days = st.slider("Días sintéticos de respaldo", 60, 365, 180)
+        sequence_length = st.slider("Ventana temporal", 7, 30, 14)
+    with col3:
+        epochs = st.slider("Epochs", 5, 80, 15)
+        max_trials = st.slider("Pruebas de hiperparámetros", 1, 8, 3)
+        stability_runs = st.slider("Pruebas de estabilidad", 1, 5, 3)
 
-    st.divider()
-    st.subheader("Modelos guardados")
-    if st.button("Ver modelos"):
+    model_types = st.multiselect(
+        "Arquitecturas neuronales",
+        ["gru", "lstm", "mlp"],
+        default=["gru", "lstm", "mlp"],
+    )
+
+    payload = {
+        "model_name": model_name,
+        "product_id": product_id or None,
+        "dataset_records": st.session_state.dataset_records,
+        "product_name": product_name,
+        "base_price": base_price,
+        "days": days,
+        "sequence_length": sequence_length,
+        "epochs": epochs,
+        "batch_size": 8,
+        "validation_splits": 3,
+        "stability_runs": stability_runs,
+        "model_types": model_types or ["gru"],
+        "max_trials": max_trials,
+    }
+
+    if st.button("Entrenar pipeline completo", type="primary"):
+        with st.spinner("Entrenando redes neuronales, validando y guardando .h5..."):
+            try:
+                result = api_post("/api/ml/train", payload)
+                st.session_state.last_training_result = result
+                st.success("Modelo entrenado y guardado correctamente.")
+            except Exception as exc:
+                st.error(f"Error de entrenamiento: {exc}")
+
+    result = st.session_state.last_training_result
+    if result:
+        st.subheader("Resultado")
+        metric_cols = st.columns(4)
+        metric_cols[0].metric("Modelo ganador", result["best_model"]["model_type"].upper())
+        metric_cols[1].metric("MAE", f"${result['metrics']['mae']:.2f}")
+        metric_cols[2].metric("RMSE", f"${result['metrics']['rmse']:.2f}")
+        metric_cols[3].metric("Estabilidad", result["stability"].get("consistency_score", "-"))
+
+        st.write("Baseline lineal")
+        st.json(result["baseline"])
+        st.write("Validación cruzada e hiperparámetros")
+        st.dataframe(pd.DataFrame(result["cross_validation"]), use_container_width=True)
+        st.write("Pruebas estadísticas robustas")
+        st.json(result["statistical_tests"])
+        st.write("EDA usada por FastAPI")
+        st.json(result["eda"])
+
+
+with tab_predict:
+    st.header("Consumir mejor modelo .h5 desde FastAPI")
+    pred_col1, pred_col2, pred_col3 = st.columns(3)
+    with pred_col1:
+        pred_model = st.text_input("Modelo para predicción", value="price_predictor")
+    with pred_col2:
+        pred_product_id = st.text_input("ID de producto para historial", value="")
+    with pred_col3:
+        days_ahead = st.slider("Días a predecir", 1, 30, 7)
+
+    if st.button("Generar predicción"):
         try:
-            response = httpx.get(f"{FASTAPI_URL}/api/ml/models")
-            models = response.json()
-            if models['models']:
-                st.write("Modelos disponibles:")
-                for model in models['models']:
-                    st.write(f"- {model}")
-            else:
-                st.info("No hay modelos guardados aún.")
-        except Exception as e:
-            st.error(f"Error al listar modelos: {str(e)}")
+            prediction = api_post(
+                "/api/ml/predict",
+                {
+                    "model_name": pred_model,
+                    "product_id": pred_product_id or None,
+                    "days_ahead": days_ahead,
+                    "base_price": 100,
+                },
+            )
+            pred_df = pd.DataFrame(prediction["predictions"])
+            st.line_chart(pred_df, x="date", y=["lower_bound", "predicted_price", "upper_bound"])
+            st.dataframe(pred_df, use_container_width=True)
+        except Exception as exc:
+            st.error(f"No se pudo predecir: {exc}")
 
 
-# --- Ver estadísticas
-st.sidebar.subheader("Estadísticas generales")
-if st.sidebar.button("Cargar estadísticas"):
+with tab_reports:
+    st.header("Modelos y reportes")
     try:
-        response = httpx.get(f"{FASTAPI_URL}/api/stats")
-        stats = response.json()
-        st.sidebar.metric("Productos favoritos", stats.get('favorites', 0))
-        st.sidebar.metric("Total de alertas", stats.get('alerts', 0))
-        st.sidebar.metric("Alertas activas", stats.get('activeAlerts', 0))
-    except Exception as e:
-        st.sidebar.error(f"Error al cargar estadísticas: {str(e)}")
+        models = api_get("/api/ml/models")["models"]
+    except Exception:
+        models = []
 
+    if not models:
+        st.info("Todavía no hay modelos entrenados.")
+    else:
+        model_names = [model["model_name"] for model in models]
+        selected_model = st.selectbox("Modelo", model_names)
+        st.dataframe(pd.DataFrame(models), use_container_width=True)
+        if st.button("Cargar reporte técnico"):
+            try:
+                report = api_get(f"/api/ml/models/{selected_model}/report")
+                st.markdown(report["report_markdown"])
+            except Exception as exc:
+                st.error(f"No se pudo cargar el reporte: {exc}")
+
+
+with tab_chat:
+    st.header("Chatbot escrito")
+    st.write("El chatbot generativo se consume por FastAPI y usa `OPENAI_API_KEY` en el backend.")
+    if "chat_messages" not in st.session_state:
+        st.session_state.chat_messages = [
+            {"role": "assistant", "content": "Hola, soy tu asistente de compras. ¿Qué querés comparar?"}
+        ]
+
+    for message in st.session_state.chat_messages:
+        with st.chat_message(message["role"]):
+            st.write(message["content"])
+
+    prompt = st.chat_input("Escribí tu consulta")
+    if prompt:
+        st.session_state.chat_messages.append({"role": "user", "content": prompt})
+        try:
+            response = api_post("/api/ai/chat", {"messages": st.session_state.chat_messages})
+            reply = response.get("reply", "No recibí respuesta.")
+        except Exception as exc:
+            reply = f"Error al consultar el chatbot: {exc}"
+        st.session_state.chat_messages.append({"role": "assistant", "content": reply})
+        st.rerun()
