@@ -50,6 +50,11 @@ export const MLPricePredictor = () => {
     try {
       const data = await ApiService.getModels();
       setModels(data.models);
+      setModelName((currentModel) =>
+        data.models.some((model) => model.model_name === currentModel)
+          ? currentModel
+          : data.models[0]?.model_name ?? currentModel
+      );
     } catch {
       setModels([]);
     }
