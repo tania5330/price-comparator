@@ -3,6 +3,7 @@ import os
 import unittest
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from uuid import UUID
 
 import numpy as np
 import pandas as pd
@@ -11,6 +12,8 @@ from fastapi import HTTPException
 from backend import ml_model
 from backend.routes.ml import (
     TrainModelRequest,
+    _apply_training_profile,
+    _training_lock,
     _training_data_source,
     delete_model,
     train_model,
@@ -18,6 +21,42 @@ from backend.routes.ml import (
 
 
 class MlProvenanceTests(unittest.TestCase):
+    def test_render_demo_profile_clamps_training_to_free_instance_limits(self):
+        request = TrainModelRequest(
+            days=365,
+            sequence_length=30,
+            epochs=80,
+            batch_size=32,
+            validation_splits=5,
+            stability_runs=5,
+            model_types=["lstm", "mlp"],
+            max_trials=8,
+        )
+
+        effective, profile = _apply_training_profile(request, "render_demo")
+
+        self.assertEqual(profile, "render_demo")
+        self.assertEqual(effective.days, 120)
+        self.assertEqual(effective.sequence_length, 14)
+        self.assertEqual(effective.epochs, 5)
+        self.assertEqual(effective.batch_size, 8)
+        self.assertEqual(effective.validation_splits, 2)
+        self.assertEqual(effective.stability_runs, 1)
+        self.assertEqual(effective.model_types, ["gru"])
+        self.assertEqual(effective.max_trials, 1)
+
+    def test_local_profile_preserves_requested_training_configuration(self):
+        request = TrainModelRequest(days=240, epochs=12, model_types=["gru", "lstm"], max_trials=2)
+
+        effective, profile = _apply_training_profile(request, None)
+
+        self.assertIsNone(profile)
+        self.assertEqual(effective, request)
+
+    def test_unknown_training_profile_is_rejected(self):
+        with self.assertRaisesRegex(RuntimeError, "Unsupported ML training profile"):
+            _apply_training_profile(TrainModelRequest(), "unbounded")
+
     def test_training_source_classification_is_explicit(self):
         self.assertEqual(_training_data_source(TrainModelRequest(dataset_records=[{"price": 10}])), "uploaded_dataset")
         self.assertEqual(_training_data_source(TrainModelRequest(product_id="product-1")), "database_price_history")
@@ -129,6 +168,111 @@ class MlProvenanceTests(unittest.TestCase):
 
         self.assertEqual(delete_error.exception.status_code, 403)
         delete_artifacts.assert_not_called()
+
+    def test_training_response_includes_effective_profile_and_configuration(self):
+        suite_result = {
+            "model_name": "demo",
+            "best_model": {},
+            "metrics": {},
+            "baseline": {},
+            "cross_validation": [],
+            "stability": {},
+            "statistical_tests": {},
+            "eda": {},
+            "data_source": "synthetic_generator",
+            "artifact_paths": {},
+        }
+        with patch.dict(os.environ, {"ML_TRAINING_ENABLED": "true", "ML_TRAINING_PROFILE": "render_demo", "ML_TRAINING_KEY": "demo-key"}, clear=False), patch.object(
+            ml_model, "train_model_suite", return_value=suite_result
+        ):
+            response = asyncio.run(train_model(TrainModelRequest(epochs=80, model_types=["lstm"]), training_key="demo-key"))
+
+        self.assertEqual(response["training_profile"], "render_demo")
+        self.assertEqual(response["training_config"]["epochs"], 5)
+        self.assertEqual(response["training_config"]["model_types"], ["gru"])
+
+    def test_training_key_rejects_missing_or_wrong_value_before_tensorflow_work(self):
+        with patch.dict(os.environ, {"ML_TRAINING_ENABLED": "true", "ML_TRAINING_KEY": "correct-key"}, clear=False), patch.object(
+            ml_model, "train_model_suite"
+        ) as train_suite:
+            for training_key in (None, "wrong-key"):
+                with self.subTest(training_key=training_key), self.assertRaises(HTTPException) as auth_error:
+                    asyncio.run(train_model(TrainModelRequest(), training_key=training_key))
+
+                self.assertEqual(auth_error.exception.status_code, 401)
+
+        train_suite.assert_not_called()
+
+    def test_render_demo_without_configured_training_key_fails_closed(self):
+        with patch.dict(
+            os.environ,
+            {"ML_TRAINING_ENABLED": "true", "ML_TRAINING_PROFILE": "render_demo"},
+            clear=True,
+        ), patch.object(ml_model, "train_model_suite") as train_suite:
+            with self.assertRaises(HTTPException) as config_error:
+                asyncio.run(train_model(TrainModelRequest()))
+
+        self.assertEqual(config_error.exception.status_code, 503)
+        train_suite.assert_not_called()
+
+    def test_correct_training_key_allows_training(self):
+        suite_result = {
+            "model_name": "local_model",
+            "best_model": {},
+            "metrics": {},
+            "baseline": {},
+            "cross_validation": [],
+            "stability": {},
+            "statistical_tests": {},
+            "eda": {},
+            "data_source": "synthetic_generator",
+            "artifact_paths": {},
+        }
+        with patch.dict(os.environ, {"ML_TRAINING_ENABLED": "true", "ML_TRAINING_KEY": "correct-key"}, clear=False), patch.object(
+            ml_model, "train_model_suite", return_value=suite_result
+        ) as train_suite:
+            asyncio.run(train_model(TrainModelRequest(), training_key="correct-key"))
+
+        train_suite.assert_called_once()
+
+    def test_render_demo_uses_a_unique_server_generated_model_name(self):
+        suite_result = {
+            "model_name": "placeholder",
+            "best_model": {},
+            "metrics": {},
+            "baseline": {},
+            "cross_validation": [],
+            "stability": {},
+            "statistical_tests": {},
+            "eda": {},
+            "data_source": "synthetic_generator",
+            "artifact_paths": {},
+        }
+        with patch.dict(os.environ, {"ML_TRAINING_ENABLED": "true", "ML_TRAINING_PROFILE": "render_demo", "ML_TRAINING_KEY": "demo-key"}, clear=False), patch.object(
+            ml_model, "train_model_suite", return_value=suite_result
+        ) as train_suite, patch(
+            "backend.routes.ml.uuid.uuid4", side_effect=[UUID(int=1), UUID(int=2)]
+        ):
+            asyncio.run(train_model(TrainModelRequest(model_name="bootstrap_price_forecaster"), training_key="demo-key"))
+            asyncio.run(train_model(TrainModelRequest(model_name="bootstrap_price_forecaster"), training_key="demo-key"))
+
+        published_names = [call.kwargs["model_name"] for call in train_suite.call_args_list]
+        self.assertEqual(published_names, [f"render_demo_{UUID(int=1).hex}", f"render_demo_{UUID(int=2).hex}"])
+        self.assertNotIn("bootstrap_price_forecaster", published_names)
+
+    def test_concurrent_training_is_rejected_before_tensorflow_work(self):
+        _training_lock.acquire()
+        try:
+            with patch.dict(os.environ, {"ML_TRAINING_ENABLED": "true"}, clear=False), patch.object(
+                ml_model, "train_model_suite"
+            ) as train_suite:
+                with self.assertRaises(HTTPException) as training_error:
+                    asyncio.run(train_model(TrainModelRequest()))
+        finally:
+            _training_lock.release()
+
+        self.assertEqual(training_error.exception.status_code, 409)
+        train_suite.assert_not_called()
 
 
 if __name__ == "__main__":

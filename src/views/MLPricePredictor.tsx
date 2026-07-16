@@ -23,21 +23,28 @@ import { useTheme } from '../context/ThemeContext';
 import { ApiService } from '../services/api';
 import { MLModelSummary, MLPrediction, MLTrainingResult } from '../types';
 
+type TrainingResultWithProfile = MLTrainingResult & {
+  training_profile?: string | null;
+  training_config?: Record<string, number | string | string[]>;
+};
+
 export const MLPricePredictor = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [trainingLoading, setTrainingLoading] = useState(false);
   const [modelName, setModelName] = useState('price_predictor');
+  const [trainingModelName, setTrainingModelName] = useState('price_predictor');
   const [productId, setProductId] = useState('');
   const [productName, setProductName] = useState('Producto X');
   const [basePrice, setBasePrice] = useState(100);
-  const [days, setDays] = useState(180);
+  const [days, setDays] = useState(120);
   const [sequenceLength, setSequenceLength] = useState(14);
-  const [epochs, setEpochs] = useState(15);
-  const [maxTrials, setMaxTrials] = useState(3);
+  const [epochs, setEpochs] = useState(5);
+  const [maxTrials, setMaxTrials] = useState(1);
+  const [trainingKey, setTrainingKey] = useState('');
   const [daysAhead, setDaysAhead] = useState(7);
   const [predictions, setPredictions] = useState<MLPrediction[]>([]);
-  const [trainingResult, setTrainingResult] = useState<MLTrainingResult | null>(null);
+  const [trainingResult, setTrainingResult] = useState<TrainingResultWithProfile | null>(null);
   const [models, setModels] = useState<MLModelSummary[]>([]);
   const [report, setReport] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -46,15 +53,16 @@ export const MLPricePredictor = () => {
   const inputClass = `w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-indigo-500 focus:outline-none ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`;
   const mutedText = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
 
-  const loadModels = async () => {
+  const loadModels = async (preferredModel?: string) => {
     try {
       const data = await ApiService.getModels();
       setModels(data.models);
-      setModelName((currentModel) =>
-        data.models.some((model) => model.model_name === currentModel)
-          ? currentModel
+      setModelName((currentModel) => {
+        const selectedModel = preferredModel ?? currentModel;
+        return data.models.some((model) => model.model_name === selectedModel)
+          ? selectedModel
           : data.models[0]?.model_name ?? currentModel
-      );
+      });
     } catch {
       setModels([]);
     }
@@ -70,7 +78,7 @@ export const MLPricePredictor = () => {
     setReport('');
     try {
       const data = await ApiService.trainPriceModel({
-        model_name: modelName,
+        model_name: trainingModelName,
         product_id: productId.trim() || undefined,
         product_name: productName,
         base_price: basePrice,
@@ -78,17 +86,19 @@ export const MLPricePredictor = () => {
         sequence_length: sequenceLength,
         epochs,
         batch_size: 8,
-        validation_splits: 3,
-        stability_runs: 3,
-        model_types: ['gru', 'lstm', 'mlp'],
+        validation_splits: 2,
+        stability_runs: 1,
+        model_types: ['gru'],
         max_trials: maxTrials
-      });
+      }, { trainingKey });
       setTrainingResult(data);
-      await loadModels();
+      setModelName(data.model_name);
+      await loadModels(data.model_name);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al entrenar el modelo');
     } finally {
       setTrainingLoading(false);
+      setTrainingKey('');
     }
   };
 
@@ -135,7 +145,7 @@ export const MLPricePredictor = () => {
           <div>
             <h1 className="text-3xl font-bold">Laboratorio de Predicción Neuronal</h1>
             <p className={mutedText}>
-              Entrena modelos GRU, LSTM y MLP, selecciona el mejor `.h5` y consume sus predicciones en la app.
+              Demo Render: GRU determinista y acotada. Sus artefactos son temporales en almacenamiento efímero; el bootstrap permanece durable. El laboratorio local conserva EDA, CV y reportes.
             </p>
           </div>
         </div>
@@ -168,11 +178,11 @@ export const MLPricePredictor = () => {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Modelo</label>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Nombre del modelo a entrenar</label>
                     <input
                       type="text"
-                      value={modelName}
-                      onChange={(event) => setModelName(event.target.value)}
+                      value={trainingModelName}
+                      onChange={(event) => setTrainingModelName(event.target.value)}
                       className={inputClass}
                     />
                   </div>
@@ -185,6 +195,17 @@ export const MLPricePredictor = () => {
                       className={inputClass}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Código de acceso al entrenamiento</label>
+                  <input
+                    type="password"
+                    value={trainingKey}
+                    onChange={(event) => setTrainingKey(event.target.value)}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -253,7 +274,7 @@ export const MLPricePredictor = () => {
                   className="w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white transition-colors"
                 >
                   <RefreshCcw size={18} className={trainingLoading ? 'animate-spin' : ''} />
-                  {trainingLoading ? 'Entrenando pipeline...' : 'Entrenar y seleccionar mejor .h5'}
+                  {trainingLoading ? 'Entrenando demo GRU...' : 'Entrenar demo GRU y seleccionar mejor .h5'}
                 </button>
               </div>
             </section>
@@ -289,7 +310,7 @@ export const MLPricePredictor = () => {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <div>
                     <h2 className="text-xl font-semibold">Modelo ganador: {trainingResult.best_model.model_type?.toUpperCase()}</h2>
-                    <p className={`text-sm ${mutedText}`}>Comparado contra baseline lineal con validación temporal.</p>
+                    <p className={`text-sm ${mutedText}`}>Publicado como {trainingResult.model_name}. Comparado contra baseline lineal con validación temporal.</p>
                   </div>
                   <button
                     onClick={loadReport}
@@ -311,10 +332,11 @@ export const MLPricePredictor = () => {
                   />
                 </div>
 
-                <div className="grid md:grid-cols-3 gap-3 mt-4 text-sm">
+                <div className="grid md:grid-cols-4 gap-3 mt-4 text-sm">
                   <InfoBox title="Baseline lineal" body={`RMSE ${formatMoney(trainingResult.baseline.mean_rmse)} / MAE ${formatMoney(trainingResult.baseline.mean_mae)}`} theme={theme} />
                   <InfoBox title="Validación cruzada" body={`${trainingResult.cross_validation.length} configuraciones evaluadas con TimeSeriesSplit`} theme={theme} />
                   <InfoBox title="Pruebas estadísticas" body={`Std residuos: ${Number(trainingResult.statistical_tests.residual_std ?? 0).toFixed(3)}`} theme={theme} />
+                  <InfoBox title="Perfil efectivo" body={`${trainingResult.training_profile ?? 'local'}: ${Object.entries(trainingResult.training_config ?? {}).map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`).join(' · ') || 'sin límites'}`} theme={theme} />
                 </div>
               </section>
             )}
@@ -366,7 +388,7 @@ export const MLPricePredictor = () => {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold">Modelos guardados</h2>
                 <button
-                  onClick={loadModels}
+                  onClick={() => loadModels()}
                   className={`p-2 rounded-lg border ${theme === 'dark' ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
                   title="Actualizar"
                 >

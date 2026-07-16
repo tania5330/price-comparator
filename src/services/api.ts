@@ -265,13 +265,24 @@ export class ApiService {
     stability_runs?: number;
     model_types?: string[];
     max_trials?: number;
-  }): Promise<MLTrainingResult> {
+  }, options?: { trainingKey?: string }): Promise<MLTrainingResult & {
+    training_profile?: string | null;
+    training_config?: Record<string, number | string | string[]>;
+  }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (options?.trainingKey) {
+      headers['X-ML-Training-Key'] = options.trainingKey;
+    }
     const response = await fetch(`${API}/api/ml/train`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error('Model training failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const detail = error && typeof error.detail === 'string' ? error.detail : 'Model training failed';
+      throw new Error(detail);
+    }
     return response.json();
   }
 

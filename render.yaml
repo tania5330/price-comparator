@@ -29,7 +29,11 @@ services:
       - key: ML_ARTIFACT_DIR
         value: /opt/render/project/src/backend/ml_models
       - key: ML_TRAINING_ENABLED
-        value: "false"
+        value: "true"
+      - key: ML_TRAINING_PROFILE
+        value: render_demo
+      - key: ML_TRAINING_KEY
+        sync: false
       - key: ML_MODEL_DELETE_ENABLED
         value: "false"
       - key: ALLOWED_ORIGINS

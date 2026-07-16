@@ -12,12 +12,14 @@ FASTAPI_URL = os.getenv("FASTAPI_URL", "http://localhost:8000")
 st.set_page_config(page_title="Price Comparator ML Lab", page_icon="🧠", layout="wide")
 st.title("🧠 Laboratorio de Redes Neuronales")
 st.caption("EDA, entrenamiento, validación cruzada, estabilidad, reportes y consumo del mejor modelo .h5.")
-st.info("El entrenamiento y la eliminación de modelos están habilitados para el laboratorio local. En Render, la API publica solo inferencia con el modelo bootstrap.")
+st.info("En Render, el entrenamiento usa una demo GRU acotada (5 epochs, 120 días, 2 divisiones temporales). Sus artefactos son temporales en almacenamiento efímero; el bootstrap permanece durable. El laboratorio local conserva EDA, CV y reportes académicos.")
 
 
-def api_post(path: str, payload: dict[str, Any]) -> dict:
-    response = httpx.post(f"{FASTAPI_URL}{path}", json=payload, timeout=180.0)
-    response.raise_for_status()
+def api_post(path: str, payload: dict[str, Any], headers: dict[str, str] | None = None) -> dict:
+    response = httpx.post(f"{FASTAPI_URL}{path}", json=payload, headers=headers, timeout=180.0)
+    if response.is_error:
+        detail = response.json().get("detail") if response.headers.get("content-type", "").startswith("application/json") else None
+        raise RuntimeError(detail or f"HTTP {response.status_code}")
     return response.json()
 
 
@@ -82,6 +84,8 @@ if "dataset_records" not in st.session_state:
     st.session_state.dataset_records = None
 if "last_training_result" not in st.session_state:
     st.session_state.last_training_result = None
+if "prediction_model" not in st.session_state:
+    st.session_state.prediction_model = "price_predictor"
 
 
 with tab_data:
@@ -103,19 +107,20 @@ with tab_train:
         model_name = st.text_input("Nombre del modelo", value="price_predictor")
         product_id = st.text_input("ID de producto en DB", value="")
         product_name = st.text_input("Nombre del producto", value="Producto X")
+        training_key = st.text_input("Código de acceso al entrenamiento", type="password", key="training_access_code")
     with col2:
         base_price = st.number_input("Precio base", min_value=1.0, value=100.0, step=1.0)
-        days = st.slider("Días sintéticos de respaldo", 60, 365, 180)
+        days = st.slider("Días sintéticos de respaldo", 60, 365, 120)
         sequence_length = st.slider("Ventana temporal", 7, 30, 14)
     with col3:
-        epochs = st.slider("Epochs", 5, 80, 15)
-        max_trials = st.slider("Pruebas de hiperparámetros", 1, 8, 3)
-        stability_runs = st.slider("Pruebas de estabilidad", 1, 5, 3)
+        epochs = st.slider("Epochs", 5, 80, 5)
+        max_trials = st.slider("Pruebas de hiperparámetros", 1, 8, 1)
+        stability_runs = st.slider("Pruebas de estabilidad", 1, 5, 1)
 
     model_types = st.multiselect(
         "Arquitecturas neuronales",
         ["gru", "lstm", "mlp"],
-        default=["gru", "lstm", "mlp"],
+        default=["gru"],
     )
 
     payload = {
@@ -128,18 +133,20 @@ with tab_train:
         "sequence_length": sequence_length,
         "epochs": epochs,
         "batch_size": 8,
-        "validation_splits": 3,
+        "validation_splits": 2,
         "stability_runs": stability_runs,
         "model_types": model_types or ["gru"],
         "max_trials": max_trials,
     }
 
-    if st.button("Entrenar pipeline completo", type="primary"):
-        with st.spinner("Entrenando redes neuronales, validando y guardando .h5..."):
+    if st.button("Entrenar demo GRU", type="primary"):
+        with st.spinner("Entrenando demo GRU, validando y guardando .h5..."):
             try:
-                result = api_post("/api/ml/train", payload)
+                headers = {"X-ML-Training-Key": training_key} if training_key else None
+                result = api_post("/api/ml/train", payload, headers=headers)
                 st.session_state.last_training_result = result
-                st.success("Modelo entrenado y guardado correctamente.")
+                st.session_state.prediction_model = result["model_name"]
+                st.success(f"Modelo temporal entrenado: {result['model_name']}")
             except Exception as exc:
                 st.error(f"Error de entrenamiento: {exc}")
 
@@ -151,6 +158,10 @@ with tab_train:
         metric_cols[1].metric("MAE", f"${result['metrics']['mae']:.2f}")
         metric_cols[2].metric("RMSE", f"${result['metrics']['rmse']:.2f}")
         metric_cols[3].metric("Estabilidad", result["stability"].get("consistency_score", "-"))
+
+        st.write(f"Perfil efectivo: `{result.get('training_profile') or 'local'}`")
+        st.json(result.get("training_config", {}))
+        st.caption(f"Modelo publicado: {result['model_name']}. En Render este artefacto es temporal; el bootstrap durable no se reemplaza.")
 
         st.write("Baseline lineal")
         st.json(result["baseline"])
@@ -166,7 +177,7 @@ with tab_predict:
     st.header("Consumir mejor modelo .h5 desde FastAPI")
     pred_col1, pred_col2, pred_col3 = st.columns(3)
     with pred_col1:
-        pred_model = st.text_input("Modelo para predicción", value="price_predictor")
+        pred_model = st.text_input("Modelo para predicción", key="prediction_model")
     with pred_col2:
         pred_product_id = st.text_input("ID de producto para historial", value="")
     with pred_col3:
