@@ -144,3 +144,21 @@ export interface MLTrainingResult {
   eda: Record<string, unknown>;
   artifact_paths: Record<string, string>;
 }
+
+export interface BestModel {
+  id: string;
+  experiment_id: string;
+  created_at: string;
+  model_name: string;
+  model_type: string;
+  rmse: number;
+  mae: number;
+  mape?: number;
+  r2: number;
+  validation_status: string;
+  is_best: boolean;
+  dataset_name?: string;
+  dataset_source?: string;
+  hyperparameters?: Record<string, unknown>;
+}
+

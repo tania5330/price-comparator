@@ -7,7 +7,8 @@ import {
   PriceAlert,
   Product,
   ProductPrice,
-  SearchResult
+  SearchResult,
+  BestModel
 } from '../types';
 
 const API = ENV.apiUrl;
@@ -317,5 +318,41 @@ export class ApiService {
     const response = await fetch(`${API}/api/ml/models/${encodeURIComponent(modelName)}/report`);
     if (!response.ok) throw new Error('Get model report failed');
     return response.json();
+  }
+
+  static async getBestModel(): Promise<{
+    best_model: BestModel;
+  }> {
+    const response = await fetch(`${API}/api/ml/best-model`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('No hay mejor modelo entrenado aún');
+      }
+      throw new Error('Failed to get best model');
+    }
+    return response.json();
+  }
+
+  static async predictWithBestModel(payload: {
+    product_id?: string;
+    days_ahead: number;
+    base_price?: number;
+  }): Promise<{
+    best_model: BestModel;
+    model_name: string;
+    predictions: MLPrediction[];
+  }> {
+    // First get the best model
+    const bestModelResponse = await ApiService.getBestModel();
+    const bestModel = bestModelResponse.best_model;
+    // Then predict using its name
+    const predictionResponse = await ApiService.predictPrices({
+      model_name: bestModel.model_name,
+      ...payload
+    });
+    return {
+      ...predictionResponse,
+      best_model: bestModel,
+    };
   }
 }

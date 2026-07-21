@@ -7,7 +7,8 @@ import {
   FileText,
   LineChart as LineChartIcon,
   RefreshCcw,
-  TrendingUp
+  TrendingUp,
+  Award
 } from 'lucide-react';
 import {
   CartesianGrid,
@@ -21,7 +22,7 @@ import {
 } from 'recharts';
 import { useTheme } from '../context/ThemeContext';
 import { ApiService } from '../services/api';
-import { MLModelSummary, MLPrediction, MLTrainingResult } from '../types';
+import { BestModel, MLModelSummary, MLPrediction, MLTrainingResult } from '../types';
 
 type TrainingResultWithProfile = MLTrainingResult & {
   training_profile?: string | null;
@@ -48,6 +49,7 @@ export const MLPricePredictor = () => {
   const [models, setModels] = useState<MLModelSummary[]>([]);
   const [report, setReport] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [bestModel, setBestModel] = useState<BestModel | null>(null);
 
   const panelClass = `p-5 rounded-lg border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`;
   const inputClass = `w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-indigo-500 focus:outline-none ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`;
@@ -61,15 +63,26 @@ export const MLPricePredictor = () => {
         const selectedModel = preferredModel ?? currentModel;
         return data.models.some((model) => model.model_name === selectedModel)
           ? selectedModel
-          : data.models[0]?.model_name ?? currentModel
+          : data.models[0]?.model_name ?? currentModel;
       });
     } catch {
       setModels([]);
     }
   };
 
+  const loadBestModel = async () => {
+    try {
+      const data = await ApiService.getBestModel();
+      setBestModel(data.best_model);
+      setModelName(data.best_model.model_name);
+    } catch {
+      setBestModel(null);
+    }
+  };
+
   useEffect(() => {
     loadModels();
+    loadBestModel();
   }, []);
 
   const trainModel = async () => {
@@ -106,15 +119,27 @@ export const MLPricePredictor = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await ApiService.predictPrices({
-        model_name: modelName,
+      const data = await ApiService.predictWithBestModel({
         product_id: productId.trim() || undefined,
         base_price: basePrice,
         days_ahead: daysAhead
       });
       setPredictions(data.predictions);
+      setBestModel(data.best_model);
+      setModelName(data.model_name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al realizar la predicción');
+      // If no best model yet, try with the selected model
+      try {
+        const data = await ApiService.predictPrices({
+          model_name: modelName,
+          product_id: productId.trim() || undefined,
+          base_price: basePrice,
+          days_ahead: daysAhead
+        });
+        setPredictions(data.predictions);
+      } catch (err2) {
+        setError(err2 instanceof Error ? err2.message : 'Error al realizar la predicción');
+      }
     } finally {
       setLoading(false);
     }
@@ -154,6 +179,45 @@ export const MLPricePredictor = () => {
           <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-red-900/20 text-red-300 border-red-800' : 'bg-red-50 text-red-600 border-red-200'}`}>
             {error}
           </div>
+        )}
+
+        {bestModel && (
+          <section className={panelClass}>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-green-900/30 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                  <Award size={24} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Mejor Modelo Validado</h2>
+                  <p className={`text-sm ${mutedText}`}>
+                    {bestModel.model_type.toUpperCase()} · Entrenado {new Date(bestModel.created_at).toLocaleDateString('es-ES')}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const data = await ApiService.getModelReport(bestModel.model_name);
+                    setReport(data.report_markdown);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Error al cargar el reporte');
+                  }
+                }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border ${theme === 'dark' ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
+              >
+                <FileText size={16} />
+                Ver reporte técnico
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <MetricBox label="RMSE" value={formatMoney(bestModel.rmse)} theme={theme} />
+              <MetricBox label="MAE" value={formatMoney(bestModel.mae)} theme={theme} />
+              <MetricBox label="R²" value={bestModel.r2.toFixed(3)} theme={theme} />
+              <MetricBox label="Estado" value={bestModel.validation_status} theme={theme} />
+            </div>
+          </section>
         )}
 
         <div className="grid xl:grid-cols-[420px_1fr] gap-6">
@@ -338,12 +402,105 @@ export const MLPricePredictor = () => {
                   <InfoBox title="Pruebas estadísticas" body={`Std residuos: ${Number(trainingResult.statistical_tests.residual_std ?? 0).toFixed(3)}`} theme={theme} />
                   <InfoBox title="Perfil efectivo" body={`${trainingResult.training_profile ?? 'local'}: ${Object.entries(trainingResult.training_config ?? {}).map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`).join(' · ') || 'sin límites'}`} theme={theme} />
                 </div>
-              </section>
+            </section>
             )}
 
             {predictions.length > 0 && (
               <section className={panelClass}>
-                <h2 className="text-xl font-semibold mb-4">Forecast con intervalo de confianza</h2>
+                {(() => {
+                  // ---- Interpretation logic ----
+                  const firstPrice = predictions[0].predicted_price;
+                  const lastPrice = predictions[predictions.length - 1].predicted_price;
+                  const pctChange = firstPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0; /* fixed: use firstPrice */
+                  const maxPrice = Math.max(...predictions.map((p) => p.predicted_price));
+                  const minPrice = Math.min(...predictions.map((p) => p.predicted_price));
+                  const volatility = maxPrice - minPrice;
+
+                  // Trend direction
+                  const trendLabel =
+                    pctChange > 2 ? 'alcista'
+                  : pctChange < -2 ? 'bajista'
+                  : 'estable';
+
+                  // Volatility description
+                  const volLabel =
+                    volatility / firstPrice < 0.02 ? 'muy baja'
+                  : volatility / firstPrice < 0.05 ? 'moderada'
+                  : 'alta';
+
+                  // Interval width (average)
+                  const avgWidth =
+                    predictions.reduce((sum, p) => {
+                      if (p.upper_bound != null && p.lower_bound != null) {
+                        return sum + (p.upper_bound - p.lower_bound);
+                      }
+                      return sum;
+                    }, 0) / predictions.length;
+                  const widthRatio = firstPrice ? avgWidth / firstPrice : 0;
+                  const intervalLabel =
+                    widthRatio < 0.1 ? 'estrecho (alta precisión)'
+                  : widthRatio < 0.2 ? 'moderado'
+                  : 'amplio (menor precisión)';
+
+                  // Reliability from bestModel
+                   const reliability =
+                     bestModel?.r2 != null
+                       ? bestModel.r2 > 0.95 ? 'muy alta'
+                       : bestModel.r2 > 0.9 ? 'alta'
+                       : bestModel.r2 > 0.8 ? 'aceptable'
+                       : 'moderada'
+                       : 'no disponible';
+
+                   return (
+                    <>
+                      {/* Interpretation header */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Brain size={20} className={theme === 'dark' ? 'text-purple-300' : 'text-purple-600'} />
+                        <h2 className="text-xl font-semibold">Interpretación de la predicción</h2>
+                      </div>
+
+                      {/* Main interpretation text */}
+                      <div className={`p-4 rounded-lg border-l-4 ${theme === 'dark' ? 'bg-gray-700/50 border-purple-500 text-gray-100' : 'bg-purple-50 border-purple-500 text-gray-800'}`}>
+                        <p className="text-sm leading-relaxed">
+                          <span className="font-semibold">Pronóstico a {predictions.length} días:</span> Se espera una tendencia{' '}
+                          <strong>{trendLabel}</strong> con una variación estimada del{' '}
+                          <strong>{Math.abs(pctChange).toFixed(1)}%</strong>{' '}
+                          {pctChange >= 0 ? 'al alza' : 'a la baja'} respecto al precio inicial.&nbsp;
+                          La volatilidad prevista es <strong>{volLabel}</strong> y el intervalo de confianza es{' '}
+                          <strong>{intervalLabel}</strong>.&nbsp;
+                          La confiabilidad del modelo es{' '}
+                          <strong>{reliability}</strong>{' '}
+                          {bestModel?.r2 != null && <span>(R² = {bestModel.r2.toFixed(3)})</span>}.
+                        </p>
+                      </div>
+
+                      {/* KPI chips */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Tendencia</p>
+                          <p className="font-bold text-lg">{trendLabel.charAt(0).toUpperCase() + trendLabel.slice(1)}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Variación</p>
+                          <p className={`font-bold text-lg ${pctChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Volatilidad</p>
+                          <p className="font-bold text-lg capitalize">{volLabel}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Confiabilidad</p>
+                          <p className="font-bold text-lg capitalize">{reliability}</p>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <div className="mt-6">
+                  <h2 className="text-xl font-semibold mb-4">Forecast con intervalo de confianza</h2>
                 <div className="h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={predictions}>
@@ -381,7 +538,8 @@ export const MLPricePredictor = () => {
                     </tbody>
                   </table>
                 </div>
-              </section>
+              </div>
+            </section>
             )}
 
             <section className={panelClass}>
