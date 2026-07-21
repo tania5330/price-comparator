@@ -1,0 +1,51 @@
+{
+  "metrics": {
+    "mae": 2.9924,
+    "rmse": 3.5464,
+    "r2": -0.1809
+  },
+  "baseline": {
+    "model_type": "linear_baseline",
+    "folds": [
+      {
+        "mae": 18.8827,
+        "rmse": 19.7734,
+        "r2": -25.9742
+      },
+      {
+        "mae": 5.8187,
+        "rmse": 6.9943,
+        "r2": -1.4821
+      }
+    ],
+    "mean_mae": 12.3507,
+    "mean_rmse": 13.3838
+  },
+  "stability": {
+    "runs": [
+      {
+        "run": 1,
+        "seed": 11,
+        "mae": 2.7795,
+        "rmse": 3.3092,
+        "r2": -0.0283
+      }
+    ],
+    "mae_mean": 2.7795,
+    "mae_std": 0.0,
+    "rmse_mean": 3.3092,
+    "rmse_std": 0.0,
+    "consistency_score": 1.0
+  },
+  "statistical_tests": {
+    "residual_mean": 1.3853,
+    "residual_std": 3.2646,
+    "residual_mean_95ci": [
+      -0.1666,
+      2.9372
+    ],
+    "median_absolute_error": 2.3434,
+    "robust_outlier_residuals": 1,
+    "positive_residual_ratio": 0.7059
+  }
+}

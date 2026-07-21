@@ -91,3 +91,74 @@ export interface DashboardInsights {
     connectedSources: number;
   };
 }
+
+export interface MLPrediction {
+  date: string;
+  predicted_price: number;
+  lower_bound?: number;
+  upper_bound?: number;
+  confidence?: number;
+}
+
+export interface MLMetricSummary {
+  mae: number;
+  rmse: number;
+  r2?: number;
+}
+
+export interface MLModelSummary {
+  model_name: string;
+  model_type?: string;
+  created_at?: string;
+  metrics?: MLMetricSummary;
+  stability?: {
+    consistency_score?: number;
+    mae_mean?: number;
+    mae_std?: number;
+    rmse_mean?: number;
+    rmse_std?: number;
+  };
+}
+
+export interface MLTrainingResult {
+  status: string;
+  model_name: string;
+  best_model: {
+    model_type: string;
+    units?: number;
+    dropout?: number;
+    learning_rate?: number;
+    mean_mae?: number;
+    mean_rmse?: number;
+    std_rmse?: number;
+  };
+  metrics: MLMetricSummary;
+  baseline: {
+    model_type: string;
+    mean_mae: number;
+    mean_rmse: number;
+  };
+  cross_validation: Array<Record<string, unknown>>;
+  stability: Record<string, unknown>;
+  statistical_tests: Record<string, unknown>;
+  eda: Record<string, unknown>;
+  artifact_paths: Record<string, string>;
+}
+
+export interface BestModel {
+  id: string;
+  experiment_id: string;
+  created_at: string;
+  model_name: string;
+  model_type: string;
+  rmse: number;
+  mae: number;
+  mape?: number;
+  r2: number;
+  validation_status: string;
+  is_best: boolean;
+  dataset_name?: string;
+  dataset_source?: string;
+  hyperparameters?: Record<string, unknown>;
+}
+

@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { ApiService } from '../../services/api';
-import { Sparkles, X, Send, MessageSquare, Bot, User } from 'lucide-react';
+import { Sparkles, X, Send, MessageSquare, Bot, User, Mic, MicOff, Volume2 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../context/I18nContext';
 
 interface Message {
   role: 'user' | 'assistant';
   content: string;
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: any;
+    webkitSpeechRecognition?: any;
+  }
 }
 
 export function AIFloatingChat() {
@@ -21,8 +28,24 @@ export function AIFloatingChat() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+  const messagesRef = useRef(messages);
+  const isLoadingRef = useRef(false);
+
+  const supportsSpeechRecognition = typeof window !== 'undefined'
+    && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+  const supportsSpeechSynthesis = typeof window !== 'undefined' && 'speechSynthesis' in window;
+  const microphoneLabel = supportsSpeechRecognition
+    ? (isListening ? 'Detener voz' : 'Hablar con el asistente')
+    : 'Voz no disponible en este navegador';
+  const readAloudLabel = supportsSpeechSynthesis
+    ? (isSpeaking ? 'Detener lectura' : 'Leer ultima respuesta')
+    : 'Lectura no disponible en este navegador';
+  const floatingToggleLabel = isOpen ? 'Cerrar chat' : t('floatingTooltip');
 
   useEffect(() => {
     if (isOpen) {
@@ -30,35 +53,128 @@ export function AIFloatingChat() {
     }
   }, [isOpen, messages, isLoading]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
-    const userMessage: Message = { role: 'user', content: input };
-    setMessages((prev) => [...prev, userMessage]);
+  useEffect(() => {
+    return () => {
+      recognitionRef.current?.abort?.();
+      if (supportsSpeechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [supportsSpeechSynthesis]);
+
+  const sendMessage = async (textToSend: string) => {
+    const content = textToSend.trim();
+    if (!content || isLoadingRef.current) return;
+
+    const userMessage: Message = { role: 'user', content };
+    const chatHistory = [...messagesRef.current, userMessage];
+    messagesRef.current = chatHistory;
+    setMessages(chatHistory);
     setInput('');
+    isLoadingRef.current = true;
     setIsLoading(true);
 
     try {
-      const chatHistory = [...messages, userMessage].map((m) => ({
+      const payload = chatHistory.map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const reply = await ApiService.sendAIChatMessage(chatHistory);
-      setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
+      const reply = await ApiService.sendAIChatMessage(payload);
+      setMessages((prev) => {
+        const nextMessages = [...prev, { role: 'assistant' as const, content: reply }];
+        messagesRef.current = nextMessages;
+        return nextMessages;
+      });
     } catch (err) {
       console.error('Error in floating chat:', err);
-      setMessages((prev) => [
-        ...prev,
-        {
+      setMessages((prev) => {
+        const nextMessages = [
+          ...prev,
+          {
           role: 'assistant',
           content: t('floatingError'),
-        },
-      ]);
+          } as Message,
+        ];
+        messagesRef.current = nextMessages;
+        return nextMessages;
+      });
     } finally {
+      isLoadingRef.current = false;
       setIsLoading(false);
     }
+  };
+
+  const handleSend = (e: React.FormEvent) => {
+    e.preventDefault();
+    void sendMessage(input);
+  };
+
+  const getLastAssistantMessage = () => {
+    return [...messages].reverse().find((message) => message.role === 'assistant')?.content ?? '';
+  };
+
+  const speakLastAnswer = () => {
+    const text = getLastAssistantMessage();
+    if (!text || !supportsSpeechSynthesis) return;
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text.replace(/\*\*/g, ''));
+    utterance.lang = 'es-PE';
+    utterance.rate = 1;
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopSpeaking = () => {
+    if (supportsSpeechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
+
+  const startListening = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition || isLoading) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-PE';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event: any) => {
+      const transcript = event.results?.[0]?.[0]?.transcript ?? '';
+      if (transcript.trim()) {
+        void sendMessage(transcript);
+      }
+    };
+    recognition.onerror = () => setIsListening(false);
+    recognition.onend = () => setIsListening(false);
+    recognitionRef.current = recognition;
+    setIsListening(true);
+    try {
+      recognition.start();
+    } catch (err) {
+      console.error('Unable to start speech recognition:', err);
+      recognitionRef.current = null;
+      setIsListening(false);
+    }
+  };
+
+  const stopListening = () => {
+    recognitionRef.current?.stop?.();
+    setIsListening(false);
+  };
+
+  const closeChat = () => {
+    stopListening();
+    stopSpeaking();
+    setIsOpen(false);
   };
 
   return (
@@ -76,7 +192,9 @@ export function AIFloatingChat() {
               </div>
             </div>
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={closeChat}
+              aria-label="Cerrar chat"
+              title="Cerrar chat"
               className="p-1 hover:bg-indigo-700/50 rounded-lg transition-colors"
             >
               <X size={18} />
@@ -143,7 +261,29 @@ export function AIFloatingChat() {
               }`}
             />
             <button
+              type="button"
+              onClick={isListening ? stopListening : startListening}
+              aria-label={microphoneLabel}
+              title={microphoneLabel}
+              disabled={!supportsSpeechRecognition || isLoading}
+              className={`p-2 rounded-xl transition-all shrink-0 ${isListening ? 'bg-red-600 text-white' : theme === 'dark' ? 'text-gray-400 hover:text-indigo-300 hover:bg-indigo-900/20' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'} disabled:opacity-50`}
+            >
+              {isListening ? <MicOff size={14} /> : <Mic size={14} />}
+            </button>
+            <button
+              type="button"
+              onClick={isSpeaking ? stopSpeaking : speakLastAnswer}
+              aria-label={readAloudLabel}
+              title={readAloudLabel}
+              disabled={!supportsSpeechSynthesis || (!isSpeaking && !getLastAssistantMessage())}
+              className={`p-2 rounded-xl transition-all shrink-0 ${isSpeaking ? 'bg-indigo-600 text-white' : theme === 'dark' ? 'text-gray-400 hover:text-indigo-300 hover:bg-indigo-900/20' : 'text-gray-500 hover:text-indigo-600 hover:bg-indigo-50'} disabled:opacity-50`}
+            >
+              <Volume2 size={14} />
+            </button>
+            <button
               type="submit"
+              aria-label="Enviar mensaje"
+              title="Enviar mensaje"
               disabled={!input.trim() || isLoading}
               className="p-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white rounded-xl shadow-md transition-all flex items-center justify-center"
             >
@@ -155,9 +295,10 @@ export function AIFloatingChat() {
 
       {/* Floating Toggle Button */}
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => (isOpen ? closeChat() : setIsOpen(true))}
+        aria-label={floatingToggleLabel}
         className="h-12 w-12 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg shadow-indigo-600/30 hover:scale-110 active:scale-95 transition-all cursor-pointer"
-        title={t('floatingTooltip')}
+        title={floatingToggleLabel}
       >
         {isOpen ? <X size={20} /> : <MessageSquare size={20} />}
       </button>

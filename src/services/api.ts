@@ -1,5 +1,15 @@
 import { ENV } from '../config/env';
-import { Product, ProductPrice, SearchResult, PriceAlert, Favorite } from '../types';
+import {
+  Favorite,
+  MLModelSummary,
+  MLPrediction,
+  MLTrainingResult,
+  PriceAlert,
+  Product,
+  ProductPrice,
+  SearchResult,
+  BestModel
+} from '../types';
 
 const API = ENV.apiUrl;
 
@@ -243,29 +253,48 @@ export class ApiService {
 
   // --- ML / Price Prediction ---
   static async trainPriceModel(payload: {
-    base_price: number;
-    days: number;
-    product_name: string;
+    product_id?: string;
+    dataset_records?: Array<Record<string, unknown>>;
+    base_price?: number;
+    days?: number;
+    product_name?: string;
     model_name: string;
-  }): Promise<{
-    model_name: string;
-    metrics: { mae: number; rmse: number; r2: number };
+    sequence_length?: number;
+    epochs?: number;
+    batch_size?: number;
+    validation_splits?: number;
+    stability_runs?: number;
+    model_types?: string[];
+    max_trials?: number;
+  }, options?: { trainingKey?: string }): Promise<MLTrainingResult & {
+    training_profile?: string | null;
+    training_config?: Record<string, number | string | string[]>;
   }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (options?.trainingKey) {
+      headers['X-ML-Training-Key'] = options.trainingKey;
+    }
     const response = await fetch(`${API}/api/ml/train`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
-    if (!response.ok) throw new Error('Model training failed');
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      const detail = error && typeof error.detail === 'string' ? error.detail : 'Model training failed';
+      throw new Error(detail);
+    }
     return response.json();
   }
 
   static async predictPrices(payload: {
     model_name: string;
+    product_id?: string;
     days_ahead: number;
+    base_price?: number;
   }): Promise<{
     model_name: string;
-    predictions: Array<{ date: string; predicted_price: number }>;
+    predictions: MLPrediction[];
   }> {
     const response = await fetch(`${API}/api/ml/predict`, {
       method: 'POST',
@@ -276,9 +305,54 @@ export class ApiService {
     return response.json();
   }
 
-  static async getModels(): Promise<{ models: string[] }> {
+  static async getModels(): Promise<{ models: MLModelSummary[] }> {
     const response = await fetch(`${API}/api/ml/models`);
     if (!response.ok) throw new Error('Get models failed');
     return response.json();
+  }
+
+  static async getModelReport(modelName: string): Promise<{
+    metadata: Record<string, unknown>;
+    report_markdown: string;
+  }> {
+    const response = await fetch(`${API}/api/ml/models/${encodeURIComponent(modelName)}/report`);
+    if (!response.ok) throw new Error('Get model report failed');
+    return response.json();
+  }
+
+  static async getBestModel(): Promise<{
+    best_model: BestModel;
+  }> {
+    const response = await fetch(`${API}/api/ml/best-model`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('No hay mejor modelo entrenado aún');
+      }
+      throw new Error('Failed to get best model');
+    }
+    return response.json();
+  }
+
+  static async predictWithBestModel(payload: {
+    product_id?: string;
+    days_ahead: number;
+    base_price?: number;
+  }): Promise<{
+    best_model: BestModel;
+    model_name: string;
+    predictions: MLPrediction[];
+  }> {
+    // First get the best model
+    const bestModelResponse = await ApiService.getBestModel();
+    const bestModel = bestModelResponse.best_model;
+    // Then predict using its name
+    const predictionResponse = await ApiService.predictPrices({
+      model_name: bestModel.model_name,
+      ...payload
+    });
+    return {
+      ...predictionResponse,
+      best_model: bestModel,
+    };
   }
 }

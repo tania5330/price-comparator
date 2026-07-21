@@ -1,36 +1,117 @@
-import { useState } from 'react';
-import { Brain, TrendingUp, Database, BarChart3, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  BarChart3,
+  Brain,
+  Calendar,
+  Database,
+  FileText,
+  LineChart as LineChartIcon,
+  RefreshCcw,
+  TrendingUp,
+  Award
+} from 'lucide-react';
+import {
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis
+} from 'recharts';
 import { useTheme } from '../context/ThemeContext';
 import { ApiService } from '../services/api';
+import { BestModel, MLModelSummary, MLPrediction, MLTrainingResult } from '../types';
+
+type TrainingResultWithProfile = MLTrainingResult & {
+  training_profile?: string | null;
+  training_config?: Record<string, number | string | string[]>;
+};
 
 export const MLPricePredictor = () => {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
   const [trainingLoading, setTrainingLoading] = useState(false);
-  const [basePrice, setBasePrice] = useState(100);
-  const [days, setDays] = useState(180);
-  const [productName, setProductName] = useState('Producto X');
   const [modelName, setModelName] = useState('price_predictor');
+  const [trainingModelName, setTrainingModelName] = useState('price_predictor');
+  const [productId, setProductId] = useState('');
+  const [productName, setProductName] = useState('Producto X');
+  const [basePrice, setBasePrice] = useState(100);
+  const [days, setDays] = useState(120);
+  const [sequenceLength, setSequenceLength] = useState(14);
+  const [epochs, setEpochs] = useState(5);
+  const [maxTrials, setMaxTrials] = useState(1);
+  const [trainingKey, setTrainingKey] = useState('');
   const [daysAhead, setDaysAhead] = useState(7);
-  const [predictions, setPredictions] = useState<any[]>([]);
-  const [metrics, setMetrics] = useState<any>(null);
+  const [predictions, setPredictions] = useState<MLPrediction[]>([]);
+  const [trainingResult, setTrainingResult] = useState<TrainingResultWithProfile | null>(null);
+  const [models, setModels] = useState<MLModelSummary[]>([]);
+  const [report, setReport] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [bestModel, setBestModel] = useState<BestModel | null>(null);
+
+  const panelClass = `p-5 rounded-lg border ${theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`;
+  const inputClass = `w-full px-3 py-2 rounded-lg border focus:ring-2 focus:ring-indigo-500 focus:outline-none ${theme === 'dark' ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'}`;
+  const mutedText = theme === 'dark' ? 'text-gray-400' : 'text-gray-600';
+
+  const loadModels = async (preferredModel?: string) => {
+    try {
+      const data = await ApiService.getModels();
+      setModels(data.models);
+      setModelName((currentModel) => {
+        const selectedModel = preferredModel ?? currentModel;
+        return data.models.some((model) => model.model_name === selectedModel)
+          ? selectedModel
+          : data.models[0]?.model_name ?? currentModel;
+      });
+    } catch {
+      setModels([]);
+    }
+  };
+
+  const loadBestModel = async () => {
+    try {
+      const data = await ApiService.getBestModel();
+      setBestModel(data.best_model);
+      setModelName(data.best_model.model_name);
+    } catch {
+      setBestModel(null);
+    }
+  };
+
+  useEffect(() => {
+    loadModels();
+    loadBestModel();
+  }, []);
 
   const trainModel = async () => {
     setTrainingLoading(true);
     setError(null);
+    setReport('');
     try {
       const data = await ApiService.trainPriceModel({
-        base_price: basePrice,
-        days: days,
+        model_name: trainingModelName,
+        product_id: productId.trim() || undefined,
         product_name: productName,
-        model_name: modelName
-      });
-      setMetrics(data.metrics);
+        base_price: basePrice,
+        days,
+        sequence_length: sequenceLength,
+        epochs,
+        batch_size: 8,
+        validation_splits: 2,
+        stability_runs: 1,
+        model_types: ['gru'],
+        max_trials: maxTrials
+      }, { trainingKey });
+      setTrainingResult(data);
+      setModelName(data.model_name);
+      await loadModels(data.model_name);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al entrenar el modelo');
     } finally {
       setTrainingLoading(false);
+      setTrainingKey('');
     }
   };
 
@@ -38,202 +119,467 @@ export const MLPricePredictor = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await ApiService.predictPrices({
-        model_name: modelName,
+      const data = await ApiService.predictWithBestModel({
+        product_id: productId.trim() || undefined,
+        base_price: basePrice,
         days_ahead: daysAhead
       });
       setPredictions(data.predictions);
+      setBestModel(data.best_model);
+      setModelName(data.model_name);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error al realizar la predicción');
+      // If no best model yet, try with the selected model
+      try {
+        const data = await ApiService.predictPrices({
+          model_name: modelName,
+          product_id: productId.trim() || undefined,
+          base_price: basePrice,
+          days_ahead: daysAhead
+        });
+        setPredictions(data.predictions);
+      } catch (err2) {
+        setError(err2 instanceof Error ? err2.message : 'Error al realizar la predicción');
+      }
     } finally {
       setLoading(false);
     }
   };
 
+  const loadReport = async () => {
+    setError(null);
+    try {
+      const data = await ApiService.getModelReport(modelName);
+      setReport(data.report_markdown);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cargar el reporte');
+    }
+  };
+
+  const formatMoney = (value?: number) => {
+    if (value === undefined || Number.isNaN(value)) return '-';
+    return `$${value.toFixed(2)}`;
+  };
+
   return (
-    <div className={`p-6 transition-colors duration-300 ${theme === "dark" ? "text-white" : "text-gray-900"}`}>
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <div className={`p-3 rounded-xl ${theme === "dark" ? "bg-purple-900/30 text-purple-400" : "bg-purple-100 text-purple-600"}`}>
-            <Brain size={32} />
+    <div className={`p-6 transition-colors duration-300 ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex items-center gap-3">
+          <div className={`p-3 rounded-lg ${theme === 'dark' ? 'bg-indigo-900/30 text-indigo-300' : 'bg-indigo-100 text-indigo-700'}`}>
+            <Brain size={30} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold">Predicción de Precios</h1>
-            <p className={theme === "dark" ? "text-gray-400" : "text-gray-600"}>
-              Usa Machine Learning para predecir precios futuros
+            <h1 className="text-3xl font-bold">Laboratorio de Predicción Neuronal</h1>
+            <p className={mutedText}>
+              Demo Render: GRU determinista y acotada. Sus artefactos son temporales en almacenamiento efímero; el bootstrap permanece durable. El laboratorio local conserva EDA, CV y reportes.
             </p>
           </div>
         </div>
 
         {error && (
-          <div className={`mb-6 p-4 rounded-lg border ${theme === "dark" ? "bg-red-900/20 text-red-300 border-red-800" : "bg-red-50 text-red-600 border-red-200"}`}>
+          <div className={`p-4 rounded-lg border ${theme === 'dark' ? 'bg-red-900/20 text-red-300 border-red-800' : 'bg-red-50 text-red-600 border-red-200'}`}>
             {error}
           </div>
         )}
 
-        <div className="grid lg:grid-cols-2 gap-8">
-          {/* Columna 1: Entrenamiento */}
-          <div className={`p-6 rounded-2xl border ${theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-            <div className="flex items-center gap-2 mb-6">
-              <Database className={theme === "dark" ? "text-blue-400" : "text-blue-500"} />
-              <h2 className="text-xl font-semibold">Entrenar Modelo</h2>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  Precio Base del Producto
-                </label>
-                <input
-                  type="number"
-                  value={basePrice}
-                  onChange={(e) => setBasePrice(Number(e.target.value))}
-                  className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all ${theme === "dark" ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
-                  min={1}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  Días de Datos Históricos: {days}
-                </label>
-                <input
-                  type="range"
-                  value={days}
-                  onChange={(e) => setDays(Number(e.target.value))}
-                  min={30}
-                  max={365}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  Nombre del Producto
-                </label>
-                <input
-                  type="text"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all ${theme === "dark" ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  Nombre del Modelo
-                </label>
-                <input
-                  type="text"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:outline-none transition-all ${theme === "dark" ? "bg-gray-700 border-gray-600 text-white" : "bg-gray-50 border-gray-300 text-gray-900"}`}
-                />
-              </div>
-
-              <button
-                onClick={trainModel}
-                disabled={trainingLoading}
-                className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
-                  trainingLoading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700 text-white"
-                }`}
-              >
-                {trainingLoading ? "Entrenando..." : "Entrenar Modelo"}
-              </button>
-            </div>
-
-            {metrics && (
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>Métricas del Modelo</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-gray-700" : "bg-gray-100"}`}>
-                    <p className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>MAE</p>
-                    <p className="text-lg font-bold">${metrics.mae.toFixed(2)}</p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-gray-700" : "bg-gray-100"}`}>
-                    <p className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>RMSE</p>
-                    <p className="text-lg font-bold">${metrics.rmse.toFixed(2)}</p>
-                  </div>
-                  <div className={`p-3 rounded-lg ${theme === "dark" ? "bg-gray-700" : "bg-gray-100"}`}>
-                    <p className={`text-xs ${theme === "dark" ? "text-gray-400" : "text-gray-500"}`}>R²</p>
-                    <p className="text-lg font-bold">{metrics.r2.toFixed(2)}</p>
-                  </div>
+        {bestModel && (
+          <section className={panelClass}>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${theme === 'dark' ? 'bg-green-900/30 text-green-300' : 'bg-green-100 text-green-700'}`}>
+                  <Award size={24} />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Mejor Modelo Validado</h2>
+                  <p className={`text-sm ${mutedText}`}>
+                    {bestModel.model_type.toUpperCase()} · Entrenado {new Date(bestModel.created_at).toLocaleDateString('es-ES')}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* Columna 2: Predicción */}
-          <div className={`p-6 rounded-2xl border ${theme === "dark" ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"}`}>
-            <div className="flex items-center gap-2 mb-6">
-              <TrendingUp className={theme === "dark" ? "text-green-400" : "text-green-500"} />
-              <h2 className="text-xl font-semibold">Predicción de Precios</h2>
+              <button
+                onClick={async () => {
+                  setError(null);
+                  try {
+                    const data = await ApiService.getModelReport(bestModel.model_name);
+                    setReport(data.report_markdown);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Error al cargar el reporte');
+                  }
+                }}
+                className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border ${theme === 'dark' ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
+              >
+                <FileText size={16} />
+                Ver reporte técnico
+              </button>
             </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <MetricBox label="RMSE" value={formatMoney(bestModel.rmse)} theme={theme} />
+              <MetricBox label="MAE" value={formatMoney(bestModel.mae)} theme={theme} />
+              <MetricBox label="R²" value={bestModel.r2.toFixed(3)} theme={theme} />
+              <MetricBox label="Estado" value={bestModel.validation_status} theme={theme} />
+            </div>
+          </section>
+        )}
 
-            <div className="space-y-4">
-              <div>
-                <label className={`block text-sm font-medium mb-2 ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                  Días a Predecir: {daysAhead}
-                </label>
-                <input
-                  type="range"
-                  value={daysAhead}
-                  onChange={(e) => setDaysAhead(Number(e.target.value))}
-                  min={1}
-                  max={30}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700"
-                />
+        <div className="grid xl:grid-cols-[420px_1fr] gap-6">
+          <div className="space-y-6">
+            <section className={panelClass}>
+              <div className="flex items-center gap-2 mb-4">
+                <Database size={20} className={theme === 'dark' ? 'text-blue-300' : 'text-blue-600'} />
+                <h2 className="text-lg font-semibold">Dataset y Entrenamiento</h2>
               </div>
 
+              <div className="space-y-4">
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${mutedText}`}>ID de producto guardado</label>
+                  <input
+                    type="text"
+                    value={productId}
+                    onChange={(event) => setProductId(event.target.value)}
+                    placeholder="Opcional: usa price_history si existe"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Nombre del modelo a entrenar</label>
+                    <input
+                      type="text"
+                      value={trainingModelName}
+                      onChange={(event) => setTrainingModelName(event.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Producto</label>
+                    <input
+                      type="text"
+                      value={productName}
+                      onChange={(event) => setProductName(event.target.value)}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Código de acceso al entrenamiento</label>
+                  <input
+                    type="password"
+                    value={trainingKey}
+                    onChange={(event) => setTrainingKey(event.target.value)}
+                    autoComplete="off"
+                    className={inputClass}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Precio base</label>
+                    <input
+                      type="number"
+                      value={basePrice}
+                      min={1}
+                      onChange={(event) => setBasePrice(Number(event.target.value))}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Días dataset: {days}</label>
+                    <input
+                      type="range"
+                      min={60}
+                      max={365}
+                      value={days}
+                      onChange={(event) => setDays(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Ventana: {sequenceLength}</label>
+                    <input
+                      type="range"
+                      min={7}
+                      max={30}
+                      value={sequenceLength}
+                      onChange={(event) => setSequenceLength(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Epochs: {epochs}</label>
+                    <input
+                      type="range"
+                      min={5}
+                      max={60}
+                      value={epochs}
+                      onChange={(event) => setEpochs(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Trials: {maxTrials}</label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={6}
+                      value={maxTrials}
+                      onChange={(event) => setMaxTrials(Number(event.target.value))}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  onClick={trainModel}
+                  disabled={trainingLoading}
+                  className="w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-500 text-white transition-colors"
+                >
+                  <RefreshCcw size={18} className={trainingLoading ? 'animate-spin' : ''} />
+                  {trainingLoading ? 'Entrenando demo GRU...' : 'Entrenar demo GRU y seleccionar mejor .h5'}
+                </button>
+              </div>
+            </section>
+
+            <section className={panelClass}>
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp size={20} className={theme === 'dark' ? 'text-green-300' : 'text-green-600'} />
+                <h2 className="text-lg font-semibold">Predicción</h2>
+              </div>
+              <label className={`block text-sm font-medium mb-2 ${mutedText}`}>Días a predecir: {daysAhead}</label>
+              <input
+                type="range"
+                min={1}
+                max={30}
+                value={daysAhead}
+                onChange={(event) => setDaysAhead(Number(event.target.value))}
+                className="w-full mb-4"
+              />
               <button
                 onClick={predictPrices}
                 disabled={loading}
-                className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 transition-all ${
-                  loading
-                    ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-700 text-white"
-                }`}
+                className="w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-500 text-white transition-colors"
               >
-                {loading ? "Prediciendo..." : "Predecir Precios"}
+                <LineChartIcon size={18} />
+                {loading ? 'Prediciendo...' : 'Consumir mejor modelo .h5'}
               </button>
-            </div>
+            </section>
+          </div>
+
+          <div className="space-y-6">
+            {trainingResult && (
+              <section className={panelClass}>
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div>
+                    <h2 className="text-xl font-semibold">Modelo ganador: {trainingResult.best_model.model_type?.toUpperCase()}</h2>
+                    <p className={`text-sm ${mutedText}`}>Publicado como {trainingResult.model_name}. Comparado contra baseline lineal con validación temporal.</p>
+                  </div>
+                  <button
+                    onClick={loadReport}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border ${theme === 'dark' ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                  >
+                    <FileText size={16} />
+                    Ver reporte
+                  </button>
+                </div>
+
+                <div className="grid md:grid-cols-4 gap-3">
+                  <MetricBox label="MAE" value={formatMoney(trainingResult.metrics.mae)} theme={theme} />
+                  <MetricBox label="RMSE" value={formatMoney(trainingResult.metrics.rmse)} theme={theme} />
+                  <MetricBox label="R2" value={trainingResult.metrics.r2?.toFixed(3) ?? '-'} theme={theme} />
+                  <MetricBox
+                    label="Estabilidad"
+                    value={`${Number(trainingResult.stability.consistency_score ?? 0).toFixed(3)}`}
+                    theme={theme}
+                  />
+                </div>
+
+                <div className="grid md:grid-cols-4 gap-3 mt-4 text-sm">
+                  <InfoBox title="Baseline lineal" body={`RMSE ${formatMoney(trainingResult.baseline.mean_rmse)} / MAE ${formatMoney(trainingResult.baseline.mean_mae)}`} theme={theme} />
+                  <InfoBox title="Validación cruzada" body={`${trainingResult.cross_validation.length} configuraciones evaluadas con TimeSeriesSplit`} theme={theme} />
+                  <InfoBox title="Pruebas estadísticas" body={`Std residuos: ${Number(trainingResult.statistical_tests.residual_std ?? 0).toFixed(3)}`} theme={theme} />
+                  <InfoBox title="Perfil efectivo" body={`${trainingResult.training_profile ?? 'local'}: ${Object.entries(trainingResult.training_config ?? {}).map(([key, value]) => `${key}=${Array.isArray(value) ? value.join(',') : value}`).join(' · ') || 'sin límites'}`} theme={theme} />
+                </div>
+            </section>
+            )}
 
             {predictions.length > 0 && (
-              <div className="mt-6">
-                <h3 className={`font-semibold mb-4 ${theme === "dark" ? "text-gray-200" : "text-gray-800"}`}>
-                  Predicciones
-                </h3>
-                <div className={`rounded-lg overflow-hidden border ${theme === "dark" ? "border-gray-700" : "border-gray-200"}`}>
-                  <table className="w-full">
-                    <thead className={theme === "dark" ? "bg-gray-700" : "bg-gray-50"}>
+              <section className={panelClass}>
+                {(() => {
+                  // ---- Interpretation logic ----
+                  const firstPrice = predictions[0].predicted_price;
+                  const lastPrice = predictions[predictions.length - 1].predicted_price;
+                  const pctChange = firstPrice ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0; /* fixed: use firstPrice */
+                  const maxPrice = Math.max(...predictions.map((p) => p.predicted_price));
+                  const minPrice = Math.min(...predictions.map((p) => p.predicted_price));
+                  const volatility = maxPrice - minPrice;
+
+                  // Trend direction
+                  const trendLabel =
+                    pctChange > 2 ? 'alcista'
+                  : pctChange < -2 ? 'bajista'
+                  : 'estable';
+
+                  // Volatility description
+                  const volLabel =
+                    volatility / firstPrice < 0.02 ? 'muy baja'
+                  : volatility / firstPrice < 0.05 ? 'moderada'
+                  : 'alta';
+
+                  // Interval width (average)
+                  const avgWidth =
+                    predictions.reduce((sum, p) => {
+                      if (p.upper_bound != null && p.lower_bound != null) {
+                        return sum + (p.upper_bound - p.lower_bound);
+                      }
+                      return sum;
+                    }, 0) / predictions.length;
+                  const widthRatio = firstPrice ? avgWidth / firstPrice : 0;
+                  const intervalLabel =
+                    widthRatio < 0.1 ? 'estrecho (alta precisión)'
+                  : widthRatio < 0.2 ? 'moderado'
+                  : 'amplio (menor precisión)';
+
+                  // Reliability from bestModel
+                   const reliability =
+                     bestModel?.r2 != null
+                       ? bestModel.r2 > 0.95 ? 'muy alta'
+                       : bestModel.r2 > 0.9 ? 'alta'
+                       : bestModel.r2 > 0.8 ? 'aceptable'
+                       : 'moderada'
+                       : 'no disponible';
+
+                   return (
+                    <>
+                      {/* Interpretation header */}
+                      <div className="flex items-center gap-2 mb-3">
+                        <Brain size={20} className={theme === 'dark' ? 'text-purple-300' : 'text-purple-600'} />
+                        <h2 className="text-xl font-semibold">Interpretación de la predicción</h2>
+                      </div>
+
+                      {/* Main interpretation text */}
+                      <div className={`p-4 rounded-lg border-l-4 ${theme === 'dark' ? 'bg-gray-700/50 border-purple-500 text-gray-100' : 'bg-purple-50 border-purple-500 text-gray-800'}`}>
+                        <p className="text-sm leading-relaxed">
+                          <span className="font-semibold">Pronóstico a {predictions.length} días:</span> Se espera una tendencia{' '}
+                          <strong>{trendLabel}</strong> con una variación estimada del{' '}
+                          <strong>{Math.abs(pctChange).toFixed(1)}%</strong>{' '}
+                          {pctChange >= 0 ? 'al alza' : 'a la baja'} respecto al precio inicial.&nbsp;
+                          La volatilidad prevista es <strong>{volLabel}</strong> y el intervalo de confianza es{' '}
+                          <strong>{intervalLabel}</strong>.&nbsp;
+                          La confiabilidad del modelo es{' '}
+                          <strong>{reliability}</strong>{' '}
+                          {bestModel?.r2 != null && <span>(R² = {bestModel.r2.toFixed(3)})</span>}.
+                        </p>
+                      </div>
+
+                      {/* KPI chips */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Tendencia</p>
+                          <p className="font-bold text-lg">{trendLabel.charAt(0).toUpperCase() + trendLabel.slice(1)}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Variación</p>
+                          <p className={`font-bold text-lg ${pctChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {pctChange >= 0 ? '+' : ''}{pctChange.toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Volatilidad</p>
+                          <p className="font-bold text-lg capitalize">{volLabel}</p>
+                        </div>
+                        <div className={`p-3 rounded-lg text-center ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+                          <p className={`text-xs ${mutedText}`}>Confiabilidad</p>
+                          <p className="font-bold text-lg capitalize">{reliability}</p>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+                <div className="mt-6">
+                  <h2 className="text-xl font-semibold mb-4">Forecast con intervalo de confianza</h2>
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={predictions}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tickFormatter={(value) => `$${value}`} tick={{ fontSize: 12 }} />
+                      <Tooltip formatter={(value: number) => [`$${Number(value).toFixed(2)}`, '']} />
+                      <Legend />
+                      <Line type="monotone" dataKey="upper_bound" name="Límite superior" stroke="#f59e0b" strokeDasharray="4 4" dot={false} />
+                      <Line type="monotone" dataKey="predicted_price" name="Precio predicho" stroke="#16a34a" strokeWidth={3} />
+                      <Line type="monotone" dataKey="lower_bound" name="Límite inferior" stroke="#f59e0b" strokeDasharray="4 4" dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className={`mt-4 rounded-lg overflow-hidden border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+                  <table className="w-full text-sm">
+                    <thead className={theme === 'dark' ? 'bg-gray-700' : 'bg-gray-50'}>
                       <tr>
-                        <th className={`px-4 py-2 text-left text-sm font-semibold ${theme === "dark" ? "text-gray-200" : "text-gray-700"}`}>
-                          <Calendar size={16} className="inline mr-2" />
-                          Fecha
-                        </th>
-                        <th className={`px-4 py-2 text-right text-sm font-semibold ${theme === "dark" ? "text-gray-200" : "text-gray-700"}`}>
-                          <BarChart3 size={16} className="inline mr-2" />
-                          Precio Predicho
-                        </th>
+                        <th className="px-4 py-2 text-left"><Calendar size={15} className="inline mr-2" />Fecha</th>
+                        <th className="px-4 py-2 text-right"><BarChart3 size={15} className="inline mr-2" />Predicción</th>
+                        <th className="px-4 py-2 text-right">Rango</th>
+                        <th className="px-4 py-2 text-right">Confianza</th>
                       </tr>
                     </thead>
-                    <tbody className={theme === "dark" ? "divide-gray-700" : "divide-gray-200"}>
-                      {predictions.map((pred, index) => (
-                        <tr key={index} className={theme === "dark" ? "bg-gray-800" : "bg-white"}>
-                          <td className={`px-4 py-3 text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                            {pred.date}
-                          </td>
-                          <td className={`px-4 py-3 text-sm text-right font-semibold ${theme === "dark" ? "text-gray-200" : "text-gray-900"}`}>
-                            ${pred.predicted_price.toFixed(2)}
-                          </td>
+                    <tbody className={theme === 'dark' ? 'divide-y divide-gray-700' : 'divide-y divide-gray-200'}>
+                      {predictions.map((prediction) => (
+                        <tr key={prediction.date}>
+                          <td className="px-4 py-2">{prediction.date}</td>
+                          <td className="px-4 py-2 text-right font-semibold">{formatMoney(prediction.predicted_price)}</td>
+                          <td className="px-4 py-2 text-right">{formatMoney(prediction.lower_bound)} - {formatMoney(prediction.upper_bound)}</td>
+                          <td className="px-4 py-2 text-right">{Math.round((prediction.confidence ?? 0) * 100)}%</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </div>
+            </section>
+            )}
+
+            <section className={panelClass}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Modelos guardados</h2>
+                <button
+                  onClick={() => loadModels()}
+                  className={`p-2 rounded-lg border ${theme === 'dark' ? 'border-gray-600 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                  title="Actualizar"
+                >
+                  <RefreshCcw size={16} />
+                </button>
+              </div>
+              {models.length === 0 ? (
+                <p className={`text-sm ${mutedText}`}>Todavía no hay modelos `.h5` entrenados.</p>
+              ) : (
+                <div className="space-y-2">
+                  {models.map((model) => (
+                    <button
+                      key={model.model_name}
+                      onClick={() => setModelName(model.model_name)}
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${theme === 'dark' ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}
+                    >
+                      <div className="font-semibold">{model.model_name}</div>
+                      <div className={`text-xs ${mutedText}`}>
+                        {model.model_type?.toUpperCase()} · RMSE {model.metrics?.rmse ?? '-'} · estabilidad {model.stability?.consistency_score ?? '-'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            {report && (
+              <section className={panelClass}>
+                <h2 className="text-lg font-semibold mb-3">Reporte técnico</h2>
+                <pre className={`max-h-[360px] overflow-auto text-xs p-4 rounded-lg ${theme === 'dark' ? 'bg-gray-900 text-gray-200' : 'bg-gray-50 text-gray-800'}`}>
+                  {report}
+                </pre>
+              </section>
             )}
           </div>
         </div>
@@ -241,3 +587,21 @@ export const MLPricePredictor = () => {
     </div>
   );
 };
+
+function MetricBox({ label, value, theme }: { label: string; value: string; theme: string }) {
+  return (
+    <div className={`p-3 rounded-lg ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-100'}`}>
+      <p className={`text-xs ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>{label}</p>
+      <p className="text-lg font-bold">{value}</p>
+    </div>
+  );
+}
+
+function InfoBox({ title, body, theme }: { title: string; body: string; theme: string }) {
+  return (
+    <div className={`p-3 rounded-lg border ${theme === 'dark' ? 'border-gray-700 bg-gray-900/30' : 'border-gray-200 bg-gray-50'}`}>
+      <p className="font-semibold">{title}</p>
+      <p className={theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}>{body}</p>
+    </div>
+  );
+}
