@@ -1,0 +1,74 @@
+<html><body><pre># Neural Price Forecast Report: bootstrap_price_forecaster
+
+- Created at: 2026-07-15T21:03:01.026253
+- Data source: synthetic_generator
+- Best model: gru
+- Holdout MAE: 2.9924
+- Holdout RMSE: 3.5464
+- Stability score: 1.0
+
+## EDA
+```json
+{
+  "rows": 90,
+  "date_start": "2026-04-17",
+  "date_end": "2026-07-15",
+  "missing_values": {
+    "date": 0,
+    "price": 0,
+    "product_name": 0,
+    "store_name": 0
+  },
+  "price": {
+    "min": 90.93,
+    "max": 112.98,
+    "mean": 102.7724,
+    "median": 103.115,
+    "std": 4.6378,
+    "outliers_iqr": 0
+  }
+}
+```
+
+## Cross Validation
+```json
+[
+  {
+    "model_type": "gru",
+    "units": 24,
+    "dropout": 0.15,
+    "learning_rate": 0.001,
+    "seed": 42,
+    "folds": [
+      {
+        "mae": 2.8257,
+        "rmse": 3.2503,
+        "r2": 0.2712
+      },
+      {
+        "mae": 2.9586,
+        "rmse": 3.9172,
+        "r2": 0.2214
+      }
+    ],
+    "mean_mae": 2.8921,
+    "mean_rmse": 3.5838,
+    "std_rmse": 0.3334
+  }
+]
+```
+
+## Statistical Robustness
+```json
+{
+  "residual_mean": 1.3853,
+  "residual_std": 3.2646,
+  "residual_mean_95ci": [
+    -0.1666,
+    2.9372
+  ],
+  "median_absolute_error": 2.3434,
+  "robust_outlier_residuals": 1,
+  "positive_residual_ratio": 0.7059
+}
+```</pre></body></html>
